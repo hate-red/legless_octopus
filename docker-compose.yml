@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: alfa_credit_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-alfa_credit}
+      POSTGRES_USER: ${POSTGRES_USER:-alfa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alfa_secret}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-alfa} -d ${POSTGRES_DB:-alfa_credit}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alfa_credit_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-alfa}:${POSTGRES_PASSWORD:-alfa_secret}@db:5432/${POSTGRES_DB:-alfa_credit}
+      JWT_SECRET: ${JWT_SECRET:-alfa-hackathon-secret-change-me}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      AI_ENABLED: ${AI_ENABLED:-true}
+      AI_MODEL_NAME: ${AI_MODEL_NAME:-paraphrase-multilingual-MiniLM-L12-v2}
+      AI_SIMILARITY_THRESHOLD: ${AI_SIMILARITY_THRESHOLD:-0.5}
+      MOCK_BASE_URL: http://127.0.0.1:8000
+      APP_ENV: ${APP_ENV:-docker}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
+    container_name: alfa_credit_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api}
+      PORT: 3000
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

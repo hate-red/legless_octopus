@@ -1,0 +1,69 @@
+%% Умный кредитный кабинет — state machine заявки
+%% Рендер: https://mermaid.live или mermaid-cli
+
+stateDiagram-v2
+    [*] --> DRAFT: Клиент создаёт заявку
+
+    DRAFT --> VALIDATION: POST /submit
+    VALIDATION --> ENRICHMENT: Лимиты продукта соблюдены
+    VALIDATION --> REJECTED: Сумма/срок вне лимитов
+
+    ENRICHMENT --> AI_PURPOSE_CHECK: ЕГРЮЛ + ГИР БО + БКИ получены
+
+    AI_PURPOSE_CHECK --> SCORING: Проверка цели завершена
+
+    SCORING --> APPROVED: Скор >= 75\nи нет hard overrides
+    SCORING --> COUNTER_OFFER: Скор 50–74\nкомфортная сумма >= min продукта
+    SCORING --> MANUAL_REVIEW: Скор 30–49\nили прибыль < 0\nили цель не соответствует ОКВЭД
+    SCORING --> REJECTED: Скор < 30\nили просрочки > 0\nили комфортная сумма < min
+
+    APPROVED --> CONTRACT_SIGNING: Клиент подтвердил условия
+    COUNTER_OFFER --> CONTRACT_SIGNING: Клиент принял встречное предложение
+    COUNTER_OFFER --> REJECTED: Клиент отказался
+
+    MANUAL_REVIEW --> APPROVED: Банк одобрил
+    MANUAL_REVIEW --> REJECTED: Банк отклонил
+    MANUAL_REVIEW --> MANUAL_REVIEW: Запрошены доп. сведения
+
+    CONTRACT_SIGNING --> DISBURSED: Договор подписан
+
+    REJECTED --> [*]
+    DISBURSED --> [*]
+
+    note right of VALIDATION
+        Проверяются min/max суммы
+        и срока выбранного продукта
+    end note
+
+    note right of ENRICHMENT
+        Моки:
+        GET /api/mock/egrul/{inn}
+        GET /api/mock/girbo/{inn}
+        GET /api/mock/bki/{inn}
+    end note
+
+    note right of AI_PURPOSE_CHECK
+        sentence-transformers
+        paraphrase-multilingual-MiniLM-L12-v2
+        similarity >= 0.5
+    end note
+
+    note right of SCORING
+        База 50, clamp 0..100
+        DTI = (payments + new_payment) /
+              (official_revenue / 12) * 100
+        new_payment = amount / term * 1.2
+    end note
+
+    note right of COUNTER_OFFER
+        max_payment = revenue/12 * 0.5
+                      - bki.monthly_payments
+        comfortable = max_payment * term / 1.2
+    end note
+
+    note right of MANUAL_REVIEW
+        Hard overrides:
+        official_profit < 0
+        is_purpose_valid = false
+        Спорный скор 30–49
+    end note
