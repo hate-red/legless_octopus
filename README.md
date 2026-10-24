@@ -47,9 +47,9 @@ docker compose up --build
 ## Что реализовано
 
 ### Интерфейс
-- Единая дизайн-система на компонентах **shadcn/ui** (Button, Card, Input, Textarea, Label, Badge, Alert, Skeleton, Separator).
-- Рабочая ширина макета — **1280 px**, увеличенная базовая типографика (17 px) и крупные заголовки.
-- Светлая и **тёмная тема** с переключателем в сайдбаре; выбор сохраняется через `next-themes`.
+- Собственная библиотека компонентов: Button, Input, Textarea, Field, Modal, Tabs, Alert и состояния загрузки.
+- Интерфейс макета **v12**: рабочая ширина 1280 px, боковая панель 280/80 px, верхняя панель 64 px, адаптация под телефон.
+- Светлая и **тёмная тема** с переключателем в верхней панели; выбор сохраняется через Zustand.
 - Адаптивная оболочка: сайдбар на десктопе, компактная навигация на мобильных.
 - Доступные состояния фокуса, контрастные семантические цвета и аккуратные состояния загрузки / пустых списков.
 
@@ -59,11 +59,11 @@ docker compose up --build
 - Каталог хранится в БД (`products`) и отдаётся через `GET /api/products`.
 
 ### Клиент
-- Вход по JWT, защищённые маршруты и роли `client` / `bank`.
+- Вход по email или ИНН и паролю; JWT хранится в HttpOnly cookie серверного BFF. Роли `client` / `bank`.
 - Самостоятельная регистрация отключена: доступ предоставляется по выданным демо-аккаунтам.
 - Профиль компании: реквизиты, ОКВЭД, финансовые показатели и сводка по заявкам.
-- Дашборд: карточка компании, статистика и список заявок.
-- Трёхшаговый степпер новой заявки: продукт → сумма / срок / цель → подтверждение.
+- Главная: сразу форма заявки, сохранённый черновик или результат со скором.
+- Три этапа: параметры (цель, продукт, сумма, срок) → документы → проверка и отправка. Черновики можно удалить и восстановить.
 - Детальная страница заявки:
   - таймлайн всех статусов;
   - одобрение и подтверждение условий;
@@ -97,11 +97,11 @@ docker compose up --build
 
 ```text
 ┌──────────────────────────────┐
-│ Next.js 14 (App Router)      │
-│ React Query · RHF · Tailwind │
-│ shadcn/ui · next-themes      │
+│ Next.js 16 · TypeScript      │
+│ Cache Components · Zustand  │
+│ RHF · Zod · собственный UI   │
 └──────────────┬───────────────┘
-               │ REST / JWT
+               │ BFF / HttpOnly cookie / REST
 ┌──────────────▼───────────────┐
 │ FastAPI                      │
 │                              │
@@ -398,6 +398,21 @@ Authorization: Bearer <access_token>
 }
 ```
 
+### Компания, документы и уведомления
+
+- `PUT /api/company` — сведения, финансовые показатели, реквизиты и контактное лицо.
+- `GET /api/company/okveds` — справочник видов деятельности.
+- `GET /api/company/documents` — актуальные документы.
+- `PUT /api/company/documents/{kind}?filename=...&period=...` — тело запроса: PDF, до 10 МБ; kind: company / statement / finance.
+- `GET /api/company/documents/{id}/content` — просмотр владельцем или сотрудником банка.
+- `POST /api/applications/{id}/documents/confirm` — JSON `document_ids`, три актуальные версии перед отправкой.
+- `POST /api/applications/{id}/documents/respond` — ответ клиента на открытый запрос банка; обновляет документы заявки и историю.
+- `GET /api/applications/{id}/documents` — версии, привязанные к конкретной заявке.
+- `DELETE /api/applications/{id}` и `POST .../restore` — удаление и восстановление черновика.
+- `GET /api/notifications` и `POST /api/notifications/read` (JSON `ids`) — изменения статусов и отметки прочтения.
+
+Для отправки заявки нужны подтверждённые документы. После замены файла в компании отправленные заявки сохраняют свои версии.
+
 ### Mock
 
 `GET /api/mock/egrul/{inn}`, `/girbo/{inn}`, `/bki/{inn}` — публичные.
@@ -453,51 +468,18 @@ Authorization: Bearer <access_token>
 │   ├── entrypoint.sh
 │   └── requirements.txt
 ├── frontend/
-│   ├── app/
-│   │   ├── applications/[id]/page.tsx
-│   │   ├── applications/new/page.tsx
-│   │   ├── bank/applications/[id]/page.tsx
-│   │   ├── bank/applications/page.tsx
-│   │   ├── dashboard/page.tsx
-│   │   ├── login/page.tsx
-│   │   ├── profile/page.tsx
-│   │   ├── globals.css
-│   │   ├── icon.svg
-│   │   ├── layout.tsx
-│   │   ├── page.tsx
-│   │   └── providers.tsx
-│   ├── components/
-│   │   ├── ui/
-│   │   │   ├── alert.tsx
-│   │   │   ├── badge.tsx
-│   │   │   ├── button.tsx
-│   │   │   ├── card.tsx
-│   │   │   ├── input.tsx
-│   │   │   ├── label.tsx
-│   │   │   ├── separator.tsx
-│   │   │   ├── skeleton.tsx
-│   │   │   └── textarea.tsx
-│   │   ├── app-shell.tsx
-│   │   ├── scoring.tsx
-│   │   ├── status-badge.tsx
-│   │   ├── theme-toggle.tsx
-│   │   ├── timeline.tsx
-│   │   └── ui.tsx
-│   ├── lib/
-│   │   ├── api.ts
-│   │   ├── auth.tsx
-│   │   ├── cn.ts
-│   │   ├── format.ts
-│   │   ├── types.ts
-│   │   └── utils.ts
-│   ├── public/
-│   ├── components.json
+│   ├── src/
+│   │   ├── app/           # Маршруты + композиция страниц, BFF
+│   │   ├── widgets/       # Оболочка кабинета
+│   │   ├── features/      # Вход, заявка, компания, документы, банк
+│   │   ├── entities/      # Сессия и кабинет
+│   │   └── shared/        # API-контракты, UI и утилиты
+│   ├── tests/cabinet.spec.ts
 │   ├── Dockerfile
-│   ├── next.config.mjs
+│   ├── next.config.ts
+│   ├── pnpm-lock.yaml
 │   ├── package.json
-│   ├── postcss.config.mjs
-│   ├── tailwind.config.ts
-│   └── tsconfig.json
+│   └── README.md
 ├── docs/
 │   ├── data_model.md
 │   └── state_diagram.mmd
@@ -521,7 +503,9 @@ Docker Compose уже содержит безопасные значения п�
 | `POSTGRES_PORT` | `5432` | Порт Postgres на хосте |
 | `BACKEND_PORT` | `8000` | Порт API |
 | `FRONTEND_PORT` | `3000` | Порт UI |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000/api` | API для браузера (вшивается при сборке фронтенда) |
+| `BACKEND_URL` | `http://127.0.0.1:8000/api` | Серверный адрес API для локального Next.js; в Compose `http://backend:8000/api` |
+| `COOKIE_SECURE` | `false` | Защищённая cookie при HTTPS |
+| `APP_ORIGIN` | пусто | Канонический Origin интерфейса за reverse proxy, если требуется |
 | `JWT_SECRET` | демо-значение | Подпись JWT; заменить в production |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Время жизни токена |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Разрешённые origin |
@@ -534,6 +518,8 @@ Backend также читает `backend/.env` — см. `backend/.env.example`.
 ---
 
 ## База данных и миграции
+
+Миграция `0005_cabinet_documents` добавляет реквизиты компании, версии PDF, ссылки документов на заявки, мягкое удаление черновиков и отметки уведомлений. Данные существующих заявок сохраняются. Seed добавляет явно подписанные демо-PDF для тестовых компаний.
 
 - PostgreSQL 15 в Docker.
 - Схема создаётся Alembic-миграцией `0001_initial`, категории продуктов и их параметры — миграцией `0002_product_categories`. Продукты переименовываются на месте, поэтому `product_id` существующих заявок сохраняются.
@@ -556,6 +542,10 @@ docker compose up --build
 ---
 
 ## Тесты
+
+Frontend: `cd frontend`, затем `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm test:e2e`. Подробности и ограничения тестовой базы — в [frontend/README.md](frontend/README.md).
+
+API-интеграция: задайте `CABINET_TEST_URL` с адресом отдельного seeded backend и запустите `python -m unittest discover -s backend/tests -p test_cabinet_api.py -v`. Эти проверки создают заявки и меняют демодокументы.
 
 Регрессия Decision Engine запускается внутри backend-контейнера:
 
@@ -594,9 +584,9 @@ uvicorn app.main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm install
+pnpm install --frozen-lockfile
 cp .env.local.example .env.local
-npm run dev
+pnpm dev
 ```
 
 Открыть http://localhost:3000.
@@ -604,8 +594,8 @@ npm run dev
 ### Сборка фронтенда
 
 ```bash
-npm run build
-npm start
+pnpm build
+pnpm start
 ```
 
 ---
@@ -655,10 +645,10 @@ docker compose logs -f backend
 FRONTEND_PORT=3100 BACKEND_PORT=8100 docker compose up --build
 ```
 
-При смене `BACKEND_PORT` также задайте `NEXT_PUBLIC_API_URL=http://localhost:8100/api` — значение вшивается на этапе сборки фронтенда.
+При локальной разработке и смене порта API задайте `BACKEND_URL=http://127.0.0.1:8100/api` в `frontend/.env.local`. В Docker Compose используется внутренний адрес backend:8000.
 
 **Фронтенд не видит API.**  
-`NEXT_PUBLIC_API_URL` должен быть доступен из браузера пользователя, а не только из контейнера. Для локального запуска это `http://localhost:8000/api`. После изменения пересоберите frontend.
+Браузер обращается к Next.js `/api/backend`. `BACKEND_URL` должен быть доступен серверу Next.js; при изменении переменной перезапустите frontend.
 
 **Модель не загрузилась.**  
 Проверьте `docker compose logs backend | grep -i модель`. Приложение продолжит работать с fallback и явно укажет это в комментарии ИИ-проверки.

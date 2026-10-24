@@ -54,6 +54,7 @@ async def list_applications(
             IndividualEntrepreneur.user_id == User.id,
         )
         .options(*LIST_OPTIONS)
+        .where(Application.deleted_at.is_(None))
     )
     if status_filter:
         statement = statement.where(Application.status == status_filter)
@@ -95,7 +96,7 @@ async def get_application(
     _: User = Depends(require_bank),
 ):
     application = await load_application(db, application_id)
-    if application is None:
+    if application is None or application.deleted_at:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     return ApplicationDetail.model_validate(application)
 
@@ -111,7 +112,7 @@ async def make_bank_decision(
     bank_user: User = Depends(require_bank),
 ):
     application = await load_application(db, application_id)
-    if application is None:
+    if application is None or application.deleted_at:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
     if application.status != STATUS_MANUAL_REVIEW:

@@ -4,6 +4,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     DateTime,
+    LargeBinary,
     String,
     func,
 )
@@ -81,6 +82,7 @@ class CompanyProfileMixin:
     employees: Mapped[int] = mapped_column(nullable=False, default=1)
     business_age_months: Mapped[int] = mapped_column(nullable=False, default=0)
     has_overdue: Mapped[bool] = mapped_column(nullable=False, default=False)
+    details: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -180,6 +182,8 @@ class Application(Base):
     submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    documents_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     client: Mapped["User"] = relationship(
         back_populates="applications", foreign_keys=[client_id], lazy="selectin"
@@ -363,3 +367,32 @@ class StatusHistory(Base):
     )
 
     application: Mapped["Application"] = relationship(back_populates="status_history")
+
+
+class CompanyDocument(Base):
+    __tablename__ = "company_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    period: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    size: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ApplicationDocument(Base):
+    __tablename__ = "application_documents"
+
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("company_documents.id", ondelete="RESTRICT"), primary_key=True)
+
+
+class NotificationReceipt(Base):
+    __tablename__ = "notification_receipts"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    history_id: Mapped[int] = mapped_column(ForeignKey("status_history.id", ondelete="CASCADE"), primary_key=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

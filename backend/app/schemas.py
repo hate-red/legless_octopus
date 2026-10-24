@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class OkvedOut(BaseModel):
@@ -26,6 +26,13 @@ class CompanyOut(BaseModel):
     employees: int
     business_age_months: int
     has_overdue: bool
+    details: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("details", mode="before")
+    @classmethod
+    def empty_details(cls, value):
+        # SQLAlchemy column defaults are applied on insert, not construction.
+        return {} if value is None else value
 
 
 class UserOut(BaseModel):
@@ -39,8 +46,15 @@ class UserOut(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: EmailStr | None = None
+    inn: str | None = Field(default=None, pattern=r"^(\d{10}|\d{12})$")
     password: str = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_identifier(self):
+        if bool(self.email) == bool(self.inn):
+            raise ValueError("Укажите email или ИНН")
+        return self
 
 
 class TokenResponse(BaseModel):
@@ -190,6 +204,7 @@ class ApplicationListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     submitted_at: datetime | None
+    documents_confirmed_at: datetime | None = None
 
 
 class ApplicationDetail(ApplicationListItem):

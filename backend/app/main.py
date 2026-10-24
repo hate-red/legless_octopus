@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import __version__
 from app.config import settings
 from app.database import engine, get_db
-from app.routers import applications, auth, bank, mock, products
+from app.routers import applications, auth, bank, cabinet, mock, products
 from app.services.scoring.ai_service import load_llm
 
 logging.basicConfig(
@@ -56,6 +56,7 @@ app.include_router(products.router, prefix=settings.api_prefix)
 app.include_router(applications.router, prefix=settings.api_prefix)
 app.include_router(bank.router, prefix=settings.api_prefix)
 app.include_router(mock.router, prefix=settings.api_prefix)
+app.include_router(cabinet.router, prefix=settings.api_prefix)
 
 
 @app.get("/health", tags=["system"])

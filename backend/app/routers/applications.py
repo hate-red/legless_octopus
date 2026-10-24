@@ -13,7 +13,7 @@ from app.constants import (
     STATUS_REJECTED,
 )
 from app.database import get_db
-from app.models import Application, Product, StatusHistory, User
+from app.models import Application, ApplicationDocument, CompanyDocument, Product, StatusHistory, User
 from app.schemas import (
     ApplicationCreate,
     ApplicationDetail,
@@ -39,10 +39,10 @@ def _money(value: float) -> str:
 
 
 async def _get_owned_application(
-    db: AsyncSession, application_id: int, user: User
+    db: AsyncSession, application_id: int, user: User, *, include_deleted: bool = False
 ) -> Application:
     application = await load_application(db, application_id)
-    if application is None or application.client_id != user.id:
+    if application is None or application.client_id != user.id or (application.deleted_at and not include_deleted):
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     return application
 
@@ -63,6 +63,7 @@ async def list_my_applications(
         select(Application)
         .options(*LIST_OPTIONS)
         .where(Application.client_id == user.id)
+        .where(Application.deleted_at.is_(None))
         .order_by(Application.created_at.desc(), Application.id.desc())
     )
     return [
@@ -156,9 +157,35 @@ async def submit_application(
             detail="Отправить можно только черновик заявки",
         )
 
+    documents = (await db.scalars(select(CompanyDocument).join(ApplicationDocument, ApplicationDocument.document_id == CompanyDocument.id).where(ApplicationDocument.application_id == application_id))).all()
+    if application.documents_confirmed_at is None or {document.kind for document in documents} != {"company", "statement", "finance"}:
+        raise HTTPException(422, "Подтвердите документы перед отправкой заявки")
+    if any(not document.is_current for document in documents):
+        raise HTTPException(409, "Документы изменились. Подтвердите актуальные версии")
+
     await run_orchestrator(db, application)
     loaded = await reload_application(db, application.id)
     assert loaded is not None
+    return ApplicationDetail.model_validate(loaded)
+
+
+@router.delete("/{application_id}", status_code=204)
+async def delete_draft(application_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(require_client)):
+    application = await _get_owned_application(db, application_id, user)
+    if application.status != STATUS_DRAFT:
+        raise HTTPException(409, "Удалить можно только черновик")
+    application.deleted_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
+@router.post("/{application_id}/restore", response_model=ApplicationDetail)
+async def restore_draft(application_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(require_client)):
+    application = await _get_owned_application(db, application_id, user, include_deleted=True)
+    if application.status != STATUS_DRAFT:
+        raise HTTPException(409, "Восстановить можно только черновик")
+    application.deleted_at = None
+    await db.commit()
+    loaded = await reload_application(db, application.id)
     return ApplicationDetail.model_validate(loaded)
 
 
