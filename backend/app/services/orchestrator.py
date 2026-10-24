@@ -23,12 +23,12 @@ from app.models import (
     ScoringResult,
 )
 from app.services import integrations
-from app.services.ai_service import check_purpose
+from app.services.scoring.ai_service import LLMPuproseChecker
 from app.services.application_outcomes import set_approval, set_decision
 from app.services.companies import get_company_for_user
 from app.services.decision_engine import make_decision
 from app.services.okveds import get_or_create_okved
-from app.services.scoring import calculate_score
+from app.services.scoring.scoring import calculate_score
 from app.services.state_machine import transition
 
 logger = logging.getLogger(__name__)
@@ -188,16 +188,16 @@ async def run_orchestrator(
         STATUS_AI_PURPOSE_CHECK,
         comment="Проверка цели кредита локальной семантической моделью.",
     )
-    ai_result = await check_purpose(
-        application.purpose,
-        company.okved.name,
-        okved=company.okved.code,
+
+    llm_checker = LLMPuproseChecker()
+    ai_result = await llm_checker.check_purpose(
+        purpose=application.purpose,
+        okved=company.okved.name,
     )
     ai_check = AICheck(
         application_id=application.id,
         is_purpose_valid=ai_result.is_valid,
         ai_comment=ai_result.comment,
-        similarity_score=ai_result.similarity_score,
     )
     db.add(ai_check)
     await db.flush()
@@ -213,14 +213,14 @@ async def run_orchestrator(
         company=company,
         verification=verification,
         bki=bki,
-        ai=ai_result,
+        ai_result=ai_result,
         amount=application.amount,
         term_months=application.term_months,
     )
     scoring = ScoringResult(
         application_id=application.id,
         score=score,
-        factors=factors,
+        factors=[factor.to_dict() for factor in factors],
         dti_percent=dti,
     )
     db.add(scoring)
