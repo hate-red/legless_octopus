@@ -6,7 +6,6 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
@@ -20,13 +19,15 @@ from app.models import (
     AICheck,
     Application,
     BKICheck,
-    Company,
     FinancialVerification,
     ScoringResult,
 )
 from app.services import integrations
 from app.services.ai_service import check_purpose
+from app.services.application_outcomes import set_approval, set_decision
+from app.services.companies import get_company_for_user
 from app.services.decision_engine import make_decision
+from app.services.okveds import get_or_create_okved
 from app.services.scoring import calculate_score
 from app.services.state_machine import transition
 
@@ -85,31 +86,26 @@ async def run_orchestrator(
 
     errors = _validate_limits(application)
     if errors:
-        application.decision = STATUS_REJECTED
-        application.decision_reason = "Заявка не прошла валидацию: " + "; ".join(errors)
+        reason = "Заявка не прошла валидацию: " + "; ".join(errors)
+        set_decision(application, STATUS_REJECTED, reason)
         transition(
             db,
             application,
             STATUS_REJECTED,
-            comment=application.decision_reason,
+            comment=reason,
         )
         await db.commit()
         return application
 
-    company_result = await db.execute(
-        select(Company).where(Company.user_id == application.client_id)
-    )
-    company = company_result.scalar_one_or_none()
+    company = await get_company_for_user(db, application.client_id)
     if company is None:
-        application.decision = STATUS_REJECTED
-        application.decision_reason = (
-            "Не найден профиль компании. Заполните данные организации."
-        )
+        reason = "Не найден профиль компании. Заполните данные организации."
+        set_decision(application, STATUS_REJECTED, reason)
         transition(
             db,
             application,
             STATUS_REJECTED,
-            comment=application.decision_reason,
+            comment=reason,
         )
         await db.commit()
         return application
@@ -131,10 +127,14 @@ async def run_orchestrator(
     # returns generated demo data; keep the company profile from the database
     # instead of silently replacing it.
     if egrul.get("source") == "registry":
-        if egrul.get("okved"):
-            company.okved = str(egrul["okved"])
-        if egrul.get("okved_name"):
-            company.okved_name = str(egrul["okved_name"])
+        okved_code = str(egrul.get("okved") or "").strip()
+        if okved_code:
+            okved_name = str(
+                egrul.get("okved_name") or company.okved.name
+            ).strip()
+            company.okved = await get_or_create_okved(
+                db, okved_code, okved_name
+            )
     company.has_overdue = int(bki_data.get("overdue_count", 0)) > 0
 
     official_revenue = float(girbo.get("official_revenue", 0))
@@ -190,8 +190,8 @@ async def run_orchestrator(
     )
     ai_result = await check_purpose(
         application.purpose,
-        company.okved_name,
-        okved=company.okved,
+        company.okved.name,
+        okved=company.okved.code,
     )
     ai_check = AICheck(
         application_id=application.id,
@@ -239,11 +239,14 @@ async def run_orchestrator(
         ai=ai_result,
         company=company,
     )
-    application.decision = outcome.status
-    application.decision_reason = outcome.reason
-    application.approved_amount = outcome.approved_amount
-    application.approved_term_months = outcome.approved_term_months
-    application.approved_rate = outcome.approved_rate
+    set_decision(application, outcome.status, outcome.reason)
+    set_approval(
+        application,
+        approved_amount=outcome.approved_amount,
+        approved_term_months=outcome.approved_term_months,
+        approved_rate=outcome.approved_rate,
+        replace=True,
+    )
     application.counter_offer_amount = outcome.counter_offer_amount
     transition(
         db,

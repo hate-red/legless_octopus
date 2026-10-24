@@ -4,15 +4,23 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+class OkvedOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+
+
 class CompanyOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    legal_form: Literal["IP", "OOO"]
     name: str
     inn: str
     ogrn: str
-    okved: str
-    okved_name: str
+    okved: OkvedOut
     revenue: float
     declared_profit: float
     employees: int
@@ -135,6 +143,21 @@ class StatusHistoryOut(BaseModel):
     created_at: datetime
 
 
+class DecisionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    decision: str
+    decision_reason: str | None
+
+
+class ApprovalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    approved_amount: float | None
+    approved_term_months: int | None
+    approved_rate: float | None
+
+
 class ApplicationListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -146,11 +169,8 @@ class ApplicationListItem(BaseModel):
     purpose: str
     status: str
     score: int | None = Field(default=None, ge=0, le=100)
-    decision: str | None
-    decision_reason: str | None
-    approved_amount: float | None
-    approved_term_months: int | None
-    approved_rate: float | None
+    decision: DecisionOut | None = None
+    approval: ApprovalOut | None = None
     counter_offer_amount: float | None
     created_at: datetime
     updated_at: datetime

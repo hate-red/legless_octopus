@@ -1,4 +1,9 @@
-from app.models import BKICheck, Company, FinancialVerification
+from app.models import (
+    BKICheck,
+    FinancialVerification,
+    IndividualEntrepreneur,
+    LLCCompany,
+)
 from app.services.ai_service import AICheckResult
 
 
@@ -31,7 +36,7 @@ def _money(value: float) -> str:
 
 def calculate_score(
     *,
-    company: Company,
+    company: LLCCompany | IndividualEntrepreneur,
     verification: FinancialVerification,
     bki: BKICheck,
     ai: AICheckResult,

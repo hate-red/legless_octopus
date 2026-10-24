@@ -62,8 +62,11 @@ import {
   formatDateTime,
   formatMoney,
   formatPercent,
+  legalFormLabel,
   pluralMonths,
   pluralYears,
+  registrationNumberLabel,
+  registryLabel,
   repaymentTypeLabel,
   revolvingLabel,
   scoreTone,
@@ -133,11 +136,12 @@ function BankApplicationDetailContent() {
     if (!application) return;
     reset({
       comment: "",
-      approved_amount: application.approved_amount ?? application.amount,
+      approved_amount:
+        application.approval?.approved_amount ?? application.amount,
       approved_term_months:
-        application.approved_term_months ?? application.term_months,
+        application.approval?.approved_term_months ?? application.term_months,
       approved_rate:
-        application.approved_rate ?? application.product.base_rate,
+        application.approval?.approved_rate ?? application.product.base_rate,
     });
   }, [application?.id, reset]);
 
@@ -386,7 +390,7 @@ function BankApplicationDetailContent() {
                 </div>
                 <div className="text-sm font-medium text-foreground">
                   {application.decision
-                    ? statusLabel(application.decision)
+                    ? statusLabel(application.decision.decision)
                     : "В обработке"}
                 </div>
               </div>
@@ -399,19 +403,25 @@ function BankApplicationDetailContent() {
         <div className="space-y-5">
           <SectionCard
             title="Данные клиента"
-            description="Профиль компании из заявки и ЕГРЮЛ."
+            description={`Профиль компании из заявки и ${registryLabel(company?.legal_form)}.`}
             icon={<Building2 className="h-[18px] w-[18px]" />}
             actions={
               <span className="chip bg-sky-50 text-sky-700">
                 <ShieldCheck className="h-3 w-3" />
-                ЕГРЮЛ проверен
+                {registryLabel(company?.legal_form)} проверен
               </span>
             }
           >
             <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-              <Field label="Компания" value={company?.name ?? "—"} />
-              <Field label="ОКВЭД" value={`${company?.okved ?? "—"} · ${company?.okved_name ?? ""}`} />
-              <Field label="ИНН / ОГРН" value={`${company?.inn ?? "—"} / ${company?.ogrn ?? "—"}`} />
+              <Field
+                label={`Компания · ${legalFormLabel(company?.legal_form)}`}
+                value={company?.name ?? "—"}
+              />
+              <Field label="ОКВЭД" value={`${company?.okved?.code ?? "—"} · ${company?.okved?.name ?? ""}`} />
+              <Field
+                label={`ИНН / ${registrationNumberLabel(company?.legal_form)}`}
+                value={`${company?.inn ?? "—"} / ${company?.ogrn ?? "—"}`}
+              />
               <Field
                 label="Контактное лицо"
                 value={`${application.client.full_name} · ${application.client.email}`}
@@ -994,22 +1004,22 @@ function BankApplicationDetailContent() {
                           ? "Ожидается подписание договора клиентом."
                           : application.status === "DISBURSED"
                             ? "Договор подписан, средства перечислены."
-                            : application.decision_reason ??
+                            : application.decision?.decision_reason ??
                               "Автоматические проверки выполняются."}
                     </p>
                   </div>
                 </div>
 
-                {application.approved_amount &&
+                {application.approval?.approved_amount &&
                 application.status !== "COUNTER_OFFER" ? (
                   <div className="grid grid-cols-2 gap-2">
                     <MiniStat
                       label="Одобрено"
-                      value={formatMoney(application.approved_amount)}
+                      value={formatMoney(application.approval.approved_amount)}
                     />
                     <MiniStat
                       label="Ставка"
-                      value={formatPercent(application.approved_rate)}
+                      value={formatPercent(application.approval.approved_rate)}
                     />
                   </div>
                 ) : null}
@@ -1032,7 +1042,7 @@ function BankApplicationDetailContent() {
                     </div>
                     <div className="text-[11px] text-amber-700">
                       {pluralMonths(application.term_months)} ·{" "}
-                      {formatPercent(application.approved_rate)}
+                      {formatPercent(application.approval?.approved_rate)}
                     </div>
                   </div>
                 ) : null}
