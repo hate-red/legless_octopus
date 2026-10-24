@@ -1,19 +1,24 @@
 # Модель данных
 
 СУБД: **PostgreSQL 15**. ORM: SQLAlchemy 2.0 (async, `asyncpg`).  
-Миграции: `backend/alembic/versions/0001_initial.py`, `backend/alembic/versions/0002_product_categories.py`.
+Миграции: `backend/alembic/versions/0001_initial.py`, `backend/alembic/versions/0002_product_categories.py`, `backend/alembic/versions/0003_company_forms_outcomes.py`, `backend/alembic/versions/0004_okved_reference.py`.
 
 ## ER-диаграмма
 
 ```mermaid
 erDiagram
-    USERS ||--o| COMPANIES : "владеет"
+    USERS ||--o| LLC_COMPANIES : "владеет (ООО)"
+    USERS ||--o| INDIVIDUAL_ENTREPRENEURS : "владеет (ИП)"
+    OKVEDS ||--o{ LLC_COMPANIES : "вид деятельности"
+    OKVEDS ||--o{ INDIVIDUAL_ENTREPRENEURS : "вид деятельности"
     USERS ||--o{ APPLICATIONS : "подаёт"
     PRODUCTS ||--o{ APPLICATIONS : "определяет лимиты"
     APPLICATIONS ||--o| FINANCIAL_VERIFICATIONS : "имеет"
     APPLICATIONS ||--o| BKI_CHECKS : "имеет"
     APPLICATIONS ||--o| AI_CHECKS : "имеет"
     APPLICATIONS ||--o| SCORING_RESULTS : "имеет"
+    APPLICATIONS ||--o| APPLICATION_DECISIONS : "решение"
+    APPLICATIONS ||--o| APPLICATION_APPROVALS : "одобренные условия"
     APPLICATIONS ||--o{ STATUS_HISTORY : "аудит"
 
     USERS {
@@ -24,14 +29,32 @@ erDiagram
         string full_name
         datetime created_at
     }
-    COMPANIES {
+    OKVEDS {
+        int id PK
+        string code UK
+        string name
+    }
+    LLC_COMPANIES {
         int id PK
         int user_id FK, UK
+        int okved_id FK
         string name
         string inn UK
         string ogrn
-        string okved
-        string okved_name
+        float revenue
+        float declared_profit
+        int employees
+        int business_age_months
+        bool has_overdue
+        datetime created_at
+    }
+    INDIVIDUAL_ENTREPRENEURS {
+        int id PK
+        int user_id FK, UK
+        int okved_id FK
+        string full_name
+        string inn UK
+        string ogrnip
         float revenue
         float declared_profit
         int employees
@@ -63,15 +86,27 @@ erDiagram
         text purpose
         string status
         int score
-        string decision
-        text decision_reason
-        float approved_amount
-        int approved_term_months
-        float approved_rate
         float counter_offer_amount
         datetime created_at
         datetime updated_at
         datetime submitted_at
+    }
+    APPLICATION_DECISIONS {
+        int id PK
+        int application_id FK, UK
+        string decision
+        text decision_reason
+        datetime created_at
+        datetime updated_at
+    }
+    APPLICATION_APPROVALS {
+        int id PK
+        int application_id FK, UK
+        float approved_amount
+        int approved_term_months
+        float approved_rate
+        datetime created_at
+        datetime updated_at
     }
     FINANCIAL_VERIFICATIONS {
         int id PK
@@ -130,6 +165,14 @@ erDiagram
 - `products.is_revolving` отличает возобновляемую кредитную линию от срочного кредита.
 - Миграция `0002_product_categories` переименовывает существующие продукты на месте (`WORKING_CAPITAL → UNSECURED`, `EQUIPMENT → SECURED`, `EXPRESS → CREDIT_LINE`), сохраняя `product_id` у заявок.
 
+## Справочник ОКВЭД
+
+- `okveds.code` — уникальный код вида деятельности, `okveds.name` — его название.
+- `llc_companies.okved_id` и `individual_entrepreneurs.okved_id` — обязательные ссылки на справочник с `ON DELETE RESTRICT`.
+- Один код может использоваться многими компаниями; у компании ровно один вид деятельности.
+- В справочнике шесть кодов: `62.01`, `47.11`, `46.90`, `43.21`, `49.41`, `71.11`.
+- API отдаёт справочник вложенным объектом `okved: { id, code, name }` в составе `CompanyOut`.
+
 ## Роли
 
 | `users.role` | Возможности |
@@ -157,11 +200,17 @@ erDiagram
 
 - Самостоятельная регистрация отключена; пользователи и компании создаются seed и администратором банка.
 - `users.email` — уникальный индекс.
-- `companies.user_id` — `UNIQUE`, одна компания на клиентский профиль.
+- Компания клиента хранится в одной из двух независимых таблиц: `llc_companies` или `individual_entrepreneurs`.
+- `llc_companies.okved_id` и `individual_entrepreneurs.okved_id` — `NOT NULL`, имеют индексы и ссылаются на `okveds.id` с `ON DELETE RESTRICT`.
+- `okveds.code` — уникальный индекс. Один код может использоваться несколькими компаниями.
+- API нормализует профили в `CompanyOut`: у ИП `full_name → name`, `ogrnip → ogrn`, `legal_form = "IP"`; у ООО `legal_form = "OOO"`. Поле `okved` — вложенный объект `{ id, code, name }`.
+- `llc_companies.user_id` и `individual_entrepreneurs.user_id` — `UNIQUE` в каждой таблице. На уровне приложения действует инвариант «один профиль компании на пользователя»: API создания второй компании нет.
+- `llc_companies.inn` и `individual_entrepreneurs.inn` — уникальные индексы. В демо-данных у ООО «Риск» исторический 12-символьный ИНН, поэтому `llc_companies.inn` допускает до 12 символов.
 - `applications.client_id → users.id` с `ON DELETE CASCADE`.
 - `applications.product_id → products.id` с `ON DELETE RESTRICT`.
 - Все проверки (`financial_verifications`, `bki_checks`, `ai_checks`, `scoring_results`) имеют `application_id` с `UNIQUE` и `ON DELETE CASCADE` — по одной записи на заявку.
-- `status_history.application_id → applications.id` с `ON DELETE CASCADE`; записи упорядочены по `created_at, id`.
+- `application_decisions.application_id` и `application_approvals.application_id` — `UNIQUE` и `ON DELETE CASCADE`; это необязательные записи 1:1 к заявке.
+- `status_history.application_id → applications.id` с `ON DELETE CASCADE`; записи упорядочены по `created_at, id`. Это единственный журнал изменения статусов и решений.
 - Составной индекс `ix_applications_status_created` ускоряет очередь банка.
 
 ## Формат JSONB
@@ -218,14 +267,16 @@ erDiagram
 
 Порог формирования флага по выручке — 15%, по прибыли — 20%. Отрицательная официальная прибыль и наличие просрочек добавляются отдельно.
 
-## Расчётные поля
+## Расчётные поля и итоги решения
 
 - `applications.score` — дублирует итог из `scoring_results.score` для быстрых списков.
-- `applications.decision` — итоговое решение (`APPROVED`, `COUNTER_OFFER`, `MANUAL_REVIEW`, `REJECTED`).
-- `applications.counter_offer_amount` — комфортная сумма.
-- `applications.approved_amount` — сумма после одобрения или принятия встречного предложения.
-- `applications.approved_term_months`, `approved_rate` — согласованные условия.
+- `applications.counter_offer_amount` — комфортная сумма встречного предложения; остаётся в заявке, а не в отдельной таблице.
 - `applications.submitted_at` — момент запуска оркестратора.
+- `application_decisions.decision` — итоговое решение (`APPROVED`, `COUNTER_OFFER`, `MANUAL_REVIEW`, `REJECTED`).
+- `application_decisions.decision_reason` — человекочитаемое объяснение решения.
+- `application_approvals.approved_amount` — сумма после одобрения или принятия встречного предложения.
+- `application_approvals.approved_term_months`, `approved_rate` — согласованные условия.
+- API отдаёт итоги вложенными объектами `decision` и `approval`; банковский запрос на решение остаётся плоским.
 
 ## Инварианты
 
@@ -236,3 +287,7 @@ erDiagram
 5. `DISBURSED` возможен только из `CONTRACT_SIGNING`.
 6. Банк может принимать решения только по `MANUAL_REVIEW`.
 7. Все действия и автоматические этапы фиксируются в `status_history`.
+8. `decision` и `approval` — необязательные записи 1:1; отдельных таблиц истории решений нет.
+9. Для `COUNTER_OFFER` в `approval` могут быть заполнены срок и ставка, а `approved_amount` остаётся `NULL`: предложенная сумма хранится в `applications.counter_offer_amount`.
+10. Принятие встречного предложения заполняет `approval.approved_amount` и переводит заявку в `CONTRACT_SIGNING`.
+11. У каждой компании есть ровно один ОКВЭД; справочная запись, используемая компанией, не удаляется (`ON DELETE RESTRICT`).

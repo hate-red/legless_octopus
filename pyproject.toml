@@ -1,7 +1,0 @@
-[project]
-name = "legless-octopus"
-version = "0.1.0"
-description = "This is a hackathon project"
-readme = "README.md"
-requires-python = ">=3.14"
-dependencies = []

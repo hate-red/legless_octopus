@@ -44,6 +44,7 @@ import {
   collateralLabel,
   formatMoney,
   formatPercent,
+  legalFormLabel,
   pluralMonths,
   repaymentTypeLabel,
   revolvingLabel,
@@ -724,6 +725,12 @@ function NewApplicationContent() {
                         </div>
                       </div>
                       <div>
+                        <div className="text-[11px] text-muted-foreground">Форма</div>
+                        <div className="mt-0.5 font-medium text-foreground">
+                          {legalFormLabel(user?.company?.legal_form)}
+                        </div>
+                      </div>
+                      <div>
                         <div className="text-[11px] text-muted-foreground">ИНН</div>
                         <div className="mt-0.5 font-medium text-foreground">
                           {user?.company?.inn ?? "—"}
@@ -732,7 +739,7 @@ function NewApplicationContent() {
                       <div>
                         <div className="text-[11px] text-muted-foreground">ОКВЭД</div>
                         <div className="mt-0.5 font-medium text-foreground">
-                          {user?.company?.okved ?? "—"}
+                          {user?.company?.okved?.code ?? "—"}
                         </div>
                       </div>
                       <div>

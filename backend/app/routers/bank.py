@@ -5,13 +5,20 @@ from sqlalchemy.orm import selectinload
 
 from app.constants import ALL_STATUSES, STATUS_DRAFT, STATUS_MANUAL_REVIEW
 from app.database import get_db
-from app.models import Application, Company, Product, User
+from app.models import (
+    Application,
+    IndividualEntrepreneur,
+    LLCCompany,
+    Product,
+    User,
+)
 from app.schemas import (
     ApplicationDetail,
     ApplicationListItem,
     BankDecisionRequest,
 )
 from app.security import require_bank
+from app.services.application_outcomes import set_approval, set_decision
 from app.services.application_queries import (
     LIST_OPTIONS,
     load_application,
@@ -41,7 +48,11 @@ async def list_applications(
     statement = (
         select(Application)
         .join(User, Application.client_id == User.id)
-        .outerjoin(Company, Company.user_id == User.id)
+        .outerjoin(LLCCompany, LLCCompany.user_id == User.id)
+        .outerjoin(
+            IndividualEntrepreneur,
+            IndividualEntrepreneur.user_id == User.id,
+        )
         .options(*LIST_OPTIONS)
     )
     if status_filter:
@@ -56,8 +67,10 @@ async def list_applications(
         pattern = f"%{search.strip()}%"
         statement = statement.where(
             or_(
-                Company.name.ilike(pattern),
-                Company.inn.ilike(pattern),
+                LLCCompany.name.ilike(pattern),
+                LLCCompany.inn.ilike(pattern),
+                IndividualEntrepreneur.full_name.ilike(pattern),
+                IndividualEntrepreneur.inn.ilike(pattern),
                 User.full_name.ilike(pattern),
                 User.email.ilike(pattern),
                 cast(Application.id, String).ilike(pattern),
@@ -112,9 +125,10 @@ async def make_bank_decision(
     if payload.decision == "APPROVED":
         approved_amount = payload.approved_amount or application.amount
         approved_term = payload.approved_term_months or application.term_months
+        approval = application.approval
         approved_rate = (
             payload.approved_rate
-            or application.approved_rate
+            or (approval.approved_rate if approval is not None else None)
             or application.product.base_rate
         )
         if approved_amount < application.product.min_amount:
@@ -143,43 +157,46 @@ async def make_bank_decision(
                 detail="Срок не соответствует лимитам продукта",
             )
 
-        application.decision = "APPROVED"
-        application.approved_amount = approved_amount
-        application.approved_term_months = approved_term
-        application.approved_rate = approved_rate
-        application.decision_reason = comment or (
+        reason = comment or (
             "Банк одобрил заявку по итогам ручной проверки. "
             f"Сумма {_money(approved_amount)}, срок {approved_term} мес., "
             f"ставка {approved_rate}%."
+        )
+        set_decision(application, "APPROVED", reason)
+        set_approval(
+            application,
+            approved_amount=approved_amount,
+            approved_term_months=approved_term,
+            approved_rate=approved_rate,
+            replace=True,
         )
         transition(
             db,
             application,
             "APPROVED",
-            comment=application.decision_reason,
+            comment=reason,
             actor_role="bank",
         )
 
     elif payload.decision == "REJECTED":
-        application.decision = "REJECTED"
-        application.decision_reason = comment or (
+        reason = comment or (
             "Банк отклонил заявку по итогам ручной проверки."
         )
+        set_decision(application, "REJECTED", reason)
         transition(
             db,
             application,
             "REJECTED",
-            comment=application.decision_reason,
+            comment=reason,
             actor_role="bank",
         )
 
     else:
-        application.decision = "MANUAL_REVIEW"
         reason = comment or (
             "Банк запросил дополнительные сведения по заявке. "
             "Ожидается ответ клиента."
         )
-        application.decision_reason = reason
+        set_decision(application, "MANUAL_REVIEW", reason)
         transition(
             db,
             application,

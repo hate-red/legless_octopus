@@ -12,7 +12,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declarative_mixin, mapped_column, relationship
 
 from app.database import Base
 
@@ -33,7 +33,13 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    company: Mapped["Company | None"] = relationship(
+    llc_company: Mapped["LLCCompany | None"] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    individual_entrepreneur: Mapped["IndividualEntrepreneur | None"] = relationship(
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
@@ -45,19 +51,35 @@ class User(Base):
         foreign_keys="Application.client_id",
     )
 
+    @property
+    def company(self) -> "LLCCompany | IndividualEntrepreneur | None":
+        """Return the legal-entity profile regardless of its legal form."""
+        return self.llc_company or self.individual_entrepreneur
 
-class Company(Base):
-    __tablename__ = "companies"
+
+class Okved(Base):
+    __tablename__ = "okveds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(
+        String(16), unique=True, index=True, nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+@declarative_mixin
+class CompanyProfileMixin:
+    """Fields shared by LLC and individual-entrepreneur profiles."""
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    inn: Mapped[str] = mapped_column(String(12), unique=True, index=True, nullable=False)
-    ogrn: Mapped[str] = mapped_column(String(15), nullable=False)
-    okved: Mapped[str] = mapped_column(String(16), nullable=False)
-    okved_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    okved_id: Mapped[int] = mapped_column(
+        ForeignKey("okveds.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     revenue: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     declared_profit: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     employees: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -67,7 +89,43 @@ class Company(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    user: Mapped["User"] = relationship(back_populates="company")
+
+class LLCCompany(CompanyProfileMixin, Base):
+    __tablename__ = "llc_companies"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    inn: Mapped[str] = mapped_column(String(12), unique=True, index=True, nullable=False)
+    ogrn: Mapped[str] = mapped_column(String(13), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="llc_company")
+    okved: Mapped["Okved"] = relationship(lazy="joined")
+
+    @property
+    def legal_form(self) -> str:
+        return "OOO"
+
+
+class IndividualEntrepreneur(CompanyProfileMixin, Base):
+    __tablename__ = "individual_entrepreneurs"
+
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    inn: Mapped[str] = mapped_column(String(12), unique=True, index=True, nullable=False)
+    ogrnip: Mapped[str] = mapped_column(String(15), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="individual_entrepreneur")
+    okved: Mapped["Okved"] = relationship(lazy="joined")
+
+    @property
+    def name(self) -> str:
+        return self.full_name
+
+    @property
+    def ogrn(self) -> str:
+        return self.ogrnip
+
+    @property
+    def legal_form(self) -> str:
+        return "IP"
 
 
 class Product(Base):
@@ -113,11 +171,6 @@ class Application(Base):
         String(32), nullable=False, default="DRAFT", index=True
     )
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    approved_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
-    approved_term_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    approved_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     counter_offer_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -162,6 +215,18 @@ class Application(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    decision_record: Mapped["ApplicationDecision | None"] = relationship(
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    approval: Mapped["ApplicationApproval | None"] = relationship(
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
     status_history: Mapped[list["StatusHistory"]] = relationship(
         back_populates="application",
         cascade="all, delete-orphan",
@@ -172,6 +237,56 @@ class Application(Base):
     __table_args__ = (
         Index("ix_applications_status_created", "status", "created_at"),
     )
+
+    @property
+    def decision(self) -> "ApplicationDecision | None":
+        """Expose the decision row as the nested ``decision`` API object."""
+        return self.decision_record
+
+
+class ApplicationDecision(Base):
+    __tablename__ = "application_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    application: Mapped["Application"] = relationship(back_populates="decision_record")
+
+
+class ApplicationApproval(Base):
+    __tablename__ = "application_approvals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    approved_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    approved_term_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    approved_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    application: Mapped["Application"] = relationship(back_populates="approval")
 
 
 class FinancialVerification(Base):
