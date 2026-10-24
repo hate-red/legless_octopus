@@ -122,9 +122,11 @@ docker compose up --build
                │ asyncpg
 ┌──────────────▼───────────────┐
 │ PostgreSQL 15                │
-│ users, companies, products,  │
+│ users, llc_companies,        │
+│ individual_entrepreneurs,    │
+│ okveds, products,            │
 │ applications, checks,        │
-│ scoring_results, history     │
+│ scoring, outcomes, history   │
 └──────────────────────────────┘
 ```
 
@@ -366,12 +368,35 @@ Authorization: Bearer <access_token>
 `GET /api/applications/{id}` и `GET /api/bank/applications/{id}` возвращают:
 
 - заявку и продукт;
-- клиента и компанию;
+- клиента и компанию одного из двух типов: `legal_form: "IP"` или `"OOO"`;
+- вложенный справочник ОКВЭД `okved: { id, code, name }`;
 - `financial_verification`;
 - `bki_check`;
 - `ai_check`;
 - `scoring_result` с факторами;
-- `status_history`.
+- вложенные объекты `decision` (`decision`, `decision_reason`) и `approval` (`approved_amount`, `approved_term_months`, `approved_rate`), если они уже сформированы;
+- `status_history` как полный аудит статусов.
+
+`counter_offer_amount` остаётся полем самой заявки. Для встречного предложения `approval.approved_amount` может быть `null`, пока клиент не примет предложение.
+
+Пример фрагмента ответа:
+
+```json
+{
+  "id": 2,
+  "status": "COUNTER_OFFER",
+  "counter_offer_amount": 1500000,
+  "decision": {
+    "decision": "COUNTER_OFFER",
+    "decision_reason": "Банк готов одобрить кредит на комфортную сумму 1 500 000 ₽."
+  },
+  "approval": {
+    "approved_amount": null,
+    "approved_term_months": 24,
+    "approved_rate": 20.9
+  }
+}
+```
 
 ### Mock
 
@@ -402,21 +427,27 @@ Authorization: Bearer <access_token>
 │   │   │   └── products.py
 │   │   └── services/
 │   │       ├── ai_service.py
+│   │       ├── application_outcomes.py
 │   │       ├── application_queries.py
+│   │       ├── companies.py
 │   │       ├── decision_engine.py
 │   │       ├── integrations.py
 │   │       ├── mock_data.py
+│   │       ├── okveds.py
 │   │       ├── orchestrator.py
 │   │       ├── scoring.py
 │   │       └── state_machine.py
 │   ├── tests/
+│   │   ├── test_company_outcomes.py
 │   │   └── test_decision_engine.py
 │   ├── alembic/
 │   │   ├── env.py
 │   │   ├── script.py.mako
 │   │   └── versions/
 │   │       ├── 0001_initial.py
-│   │       └── 0002_product_categories.py
+│   │       ├── 0002_product_categories.py
+│   │       ├── 0003_company_forms_outcomes.py
+│   │       └── 0004_okved_reference.py
 │   ├── alembic.ini
 │   ├── Dockerfile
 │   ├── entrypoint.sh
@@ -506,6 +537,8 @@ Backend также читает `backend/.env` — см. `backend/.env.example`.
 
 - PostgreSQL 15 в Docker.
 - Схема создаётся Alembic-миграцией `0001_initial`, категории продуктов и их параметры — миграцией `0002_product_categories`. Продукты переименовываются на месте, поэтому `product_id` существующих заявок сохраняются.
+- Миграция `0003_company_forms_outcomes` заменяет `companies` двумя независимыми таблицами `llc_companies` и `individual_entrepreneurs`, а также переносит `decision` / `decision_reason` в `application_decisions`, а `approved_*` — в `application_approvals`. `counter_offer_amount` остаётся в `applications`. ID заявок, статусы и существующие данные сохраняются; downgrade собирает `companies` и плоские поля обратно.
+- Миграция `0004_okved_reference` выносит `okved` / `okved_name` в справочник `okveds` (`id`, `code`, `name`), добавляет `okved_id` с `NOT NULL` и `ON DELETE RESTRICT` в обе таблицы компаний и удаляет старые поля. Справочник содержит шесть кодов ОКВЭД; существующие профили получают ссылки без потери данных.
 - При старте контейнера `entrypoint.sh`:
   1. ждёт доступности БД;
   2. выполняет `alembic upgrade head`;

@@ -22,6 +22,7 @@ from app.schemas import (
     CounterOfferDeclineRequest,
 )
 from app.security import require_client
+from app.services.application_outcomes import set_approval, set_decision
 from app.services.application_queries import (
     LIST_OPTIONS,
     load_application,
@@ -174,12 +175,23 @@ async def confirm_conditions(
             detail="Подтвердить условия можно только по одобренной заявке",
         )
 
-    if application.approved_amount is None:
-        application.approved_amount = application.amount
-    if application.approved_term_months is None:
-        application.approved_term_months = application.term_months
-    if application.approved_rate is None:
-        application.approved_rate = application.product.base_rate
+    approval = application.approval
+    approved_amount = (
+        approval.approved_amount if approval is not None else None
+    ) or application.amount
+    approved_term = (
+        approval.approved_term_months if approval is not None else None
+    ) or application.term_months
+    approved_rate = (
+        approval.approved_rate if approval is not None else None
+    ) or application.product.base_rate
+    set_approval(
+        application,
+        approved_amount=approved_amount,
+        approved_term_months=approved_term,
+        approved_rate=approved_rate,
+        replace=True,
+    )
 
     transition(
         db,
@@ -187,9 +199,9 @@ async def confirm_conditions(
         STATUS_CONTRACT_SIGNING,
         comment=(
             "Клиент подтвердил условия кредита: "
-            f"{_money(application.approved_amount or application.amount)}, "
-            f"{application.approved_term_months} мес., "
-            f"ставка {application.approved_rate}%."
+            f"{_money(approved_amount)}, "
+            f"{approved_term} мес., "
+            f"ставка {approved_rate}%."
         ),
         actor_role="client",
     )
@@ -217,11 +229,18 @@ async def accept_counter_offer(
             detail="Встречное предложение не сформировано",
         )
 
+    approval = application.approval
+    approved_rate = (
+        approval.approved_rate if approval is not None else None
+    ) or round(application.product.base_rate + 1.0, 1)
     application.amount = application.counter_offer_amount
-    application.approved_amount = application.counter_offer_amount
-    application.approved_term_months = application.term_months
-    if application.approved_rate is None:
-        application.approved_rate = round(application.product.base_rate + 1.0, 1)
+    set_approval(
+        application,
+        approved_amount=application.counter_offer_amount,
+        approved_term_months=application.term_months,
+        approved_rate=approved_rate,
+        replace=True,
+    )
 
     transition(
         db,
@@ -256,8 +275,7 @@ async def decline_counter_offer(
     reason = "Клиент отказался от встречного предложения банка."
     if payload.comment.strip():
         reason += f" Комментарий: {payload.comment.strip()}"
-    application.decision = STATUS_REJECTED
-    application.decision_reason = reason
+    set_decision(application, STATUS_REJECTED, reason)
     transition(
         db,
         application,
@@ -284,13 +302,17 @@ async def sign_contract(
             detail="Договор можно подписать только после согласования условий",
         )
 
+    approval = application.approval
+    approved_amount = (
+        approval.approved_amount if approval is not None else None
+    ) or application.amount
     transition(
         db,
         application,
         STATUS_DISBURSED,
         comment=(
             "Договор подписан. Средства перечислены на расчётный счёт клиента. "
-            f"Сумма: {_money(application.approved_amount or application.amount)}."
+            f"Сумма: {_money(approved_amount)}."
         ),
         actor_role="client",
     )

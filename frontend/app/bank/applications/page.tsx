@@ -34,6 +34,7 @@ import { cn } from "@/lib/cn";
 import {
   formatDate,
   formatMoney,
+  legalFormLabel,
   pluralMonths,
   scoreTone,
   STATUS_LABELS,
@@ -119,7 +120,8 @@ function BankApplicationsContent() {
     )
     .reduce(
       (sum, application) =>
-        sum + (application.approved_amount ?? application.amount),
+        sum +
+        (application.approval?.approved_amount ?? application.amount),
       0,
     );
 
@@ -387,7 +389,10 @@ function BankApplicationsContent() {
                               {application.client.company?.name ?? "—"}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
-                              ИНН {application.client.company?.inn ?? "—"}
+                              {legalFormLabel(
+                                application.client.company?.legal_form,
+                              )}{" "}
+                              · ИНН {application.client.company?.inn ?? "—"}
                             </div>
                           </div>
                         </div>

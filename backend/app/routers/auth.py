@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import User
@@ -13,7 +14,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(User).where(User.email == payload.email.lower().strip())
+        select(User)
+        .options(
+            selectinload(User.llc_company),
+            selectinload(User.individual_entrepreneur),
+        )
+        .where(User.email == payload.email.lower().strip())
     )
     user = result.scalar_one_or_none()
     if user is None or not verify_password(payload.password, user.password_hash):

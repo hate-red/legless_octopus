@@ -1,4 +1,8 @@
-import type { ApplicationStatus, RepaymentType } from "@/lib/types";
+import type {
+  ApplicationStatus,
+  LegalForm,
+  RepaymentType,
+} from "@/lib/types";
 
 export function formatMoney(
   value: number | null | undefined,
@@ -23,6 +27,26 @@ export function formatCompactMoney(value: number | null | undefined): string {
     return `${Math.round(value / 1_000)} тыс. ₽`;
   }
   return formatMoney(value);
+}
+
+export function legalFormLabel(
+  legalForm: LegalForm | null | undefined,
+): string {
+  if (legalForm === "IP") return "ИП";
+  if (legalForm === "OOO") return "ООО";
+  return "—";
+}
+
+export function registrationNumberLabel(
+  legalForm: LegalForm | null | undefined,
+): string {
+  return legalForm === "IP" ? "ОГРНИП" : "ОГРН";
+}
+
+export function registryLabel(
+  legalForm: LegalForm | null | undefined,
+): string {
+  return legalForm === "IP" ? "ЕГРИП" : "ЕГРЮЛ";
 }
 
 export function formatNumber(value: number | null | undefined): string {

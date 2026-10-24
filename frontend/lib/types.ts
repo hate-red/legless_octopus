@@ -13,13 +13,21 @@ export type ApplicationStatus =
   | "CONTRACT_SIGNING"
   | "DISBURSED";
 
+export type LegalForm = "IP" | "OOO";
+
+export interface Okved {
+  id: number;
+  code: string;
+  name: string;
+}
+
 export interface Company {
   id: number;
+  legal_form: LegalForm;
   name: string;
   inn: string;
   ogrn: string;
-  okved: string;
-  okved_name: string;
+  okved: Okved;
   revenue: number;
   declared_profit: number;
   employees: number;
@@ -109,6 +117,17 @@ export interface StatusHistoryItem {
   created_at: string;
 }
 
+export interface Decision {
+  decision: string;
+  decision_reason: string | null;
+}
+
+export interface Approval {
+  approved_amount: number | null;
+  approved_term_months: number | null;
+  approved_rate: number | null;
+}
+
 export interface ApplicationListItem {
   id: number;
   product: Product;
@@ -118,11 +137,8 @@ export interface ApplicationListItem {
   purpose: string;
   status: ApplicationStatus;
   score: number | null;
-  decision: string | null;
-  decision_reason: string | null;
-  approved_amount: number | null;
-  approved_term_months: number | null;
-  approved_rate: number | null;
+  decision: Decision | null;
+  approval: Approval | null;
   counter_offer_amount: number | null;
   created_at: string;
   updated_at: string;

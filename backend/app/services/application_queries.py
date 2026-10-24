@@ -7,17 +7,23 @@ from app.models import Application, User
 
 DETAIL_OPTIONS = (
     selectinload(Application.product),
-    selectinload(Application.client).selectinload(User.company),
+    selectinload(Application.client).selectinload(User.llc_company),
+    selectinload(Application.client).selectinload(User.individual_entrepreneur),
     selectinload(Application.financial_verification),
     selectinload(Application.bki_check),
     selectinload(Application.ai_check),
     selectinload(Application.scoring_result),
+    selectinload(Application.decision_record),
+    selectinload(Application.approval),
     selectinload(Application.status_history),
 )
 
 LIST_OPTIONS = (
     selectinload(Application.product),
-    selectinload(Application.client).selectinload(User.company),
+    selectinload(Application.client).selectinload(User.llc_company),
+    selectinload(Application.client).selectinload(User.individual_entrepreneur),
+    selectinload(Application.decision_record),
+    selectinload(Application.approval),
 )
 
 

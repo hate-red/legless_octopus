@@ -11,7 +11,13 @@ from app.constants import (
     STATUS_MANUAL_REVIEW,
     STATUS_REJECTED,
 )
-from app.models import BKICheck, Company, FinancialVerification, Product
+from app.models import (
+    BKICheck,
+    FinancialVerification,
+    IndividualEntrepreneur,
+    LLCCompany,
+    Product,
+)
 from app.services.ai_service import AICheckResult
 
 
@@ -54,7 +60,7 @@ def make_decision(
     bki: BKICheck,
     verification: FinancialVerification,
     ai: AICheckResult,
-    company: Company,
+    company: LLCCompany | IndividualEntrepreneur,
 ) -> DecisionOutcome:
     # 1. Hard overrides -------------------------------------------------------
     if bki.overdue_count > 0:

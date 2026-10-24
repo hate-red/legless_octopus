@@ -6,7 +6,15 @@ from sqlalchemy import func, select
 
 from app.constants import STATUS_DRAFT
 from app.database import AsyncSessionLocal
-from app.models import Application, Company, Product, StatusHistory, User
+from app.models import (
+    Application,
+    IndividualEntrepreneur,
+    LLCCompany,
+    Okved,
+    Product,
+    StatusHistory,
+    User,
+)
 from app.security import hash_password
 from app.services.application_queries import load_application
 from app.services.orchestrator import run_orchestrator
@@ -73,6 +81,38 @@ PRODUCTS = [
 ]
 
 
+OKVEDS = [
+    {
+        "code": "62.01",
+        "name": "Разработка компьютерного программного обеспечения",
+    },
+    {
+        "code": "47.11",
+        "name": (
+            "Торговля розничная преимущественно пищевыми продуктами, "
+            "включая напитки, и табачными изделиями "
+            "в неспециализированных магазинах"
+        ),
+    },
+    {
+        "code": "46.90",
+        "name": "Торговля оптовая неспециализированная",
+    },
+    {
+        "code": "43.21",
+        "name": "Производство электромонтажных работ",
+    },
+    {
+        "code": "49.41",
+        "name": "Деятельность автомобильного грузового транспорта",
+    },
+    {
+        "code": "71.11",
+        "name": "Деятельность в области архитектуры",
+    },
+]
+
+
 USERS = [
     {
         "email": "client1@example.com",
@@ -80,11 +120,11 @@ USERS = [
         "full_name": "Смирнов Алексей Петрович",
         "role": "client",
         "company": {
+            "legal_form": "OOO",
             "name": "ООО «Ромашка»",
             "inn": "7701234567",
             "ogrn": "1237700123456",
             "okved": "62.01",
-            "okved_name": "Разработка компьютерного программного обеспечения",
             "revenue": 15_000_000,
             "declared_profit": 1_800_000,
             "employees": 42,
@@ -98,15 +138,11 @@ USERS = [
         "full_name": "Иванов Иван Иванович",
         "role": "client",
         "company": {
-            "name": "ИП Иванов Иван Иванович",
+            "legal_form": "IP",
+            "full_name": "ИП Иванов Иван Иванович",
             "inn": "770123456789",
-            "ogrn": "325770000123456",
+            "ogrnip": "325770000123456",
             "okved": "47.11",
-            "okved_name": (
-                "Торговля розничная преимущественно пищевыми продуктами, "
-                "включая напитки, и табачными изделиями "
-                "в неспециализированных магазинах"
-            ),
             "revenue": 5_400_000,
             "declared_profit": 500_000,
             "employees": 12,
@@ -120,11 +156,11 @@ USERS = [
         "full_name": "Петров Дмитрий Сергеевич",
         "role": "client",
         "company": {
+            "legal_form": "OOO",
             "name": "ООО «Риск»",
             "inn": "770123456700",
             "ogrn": "1257700987654",
             "okved": "46.90",
-            "okved_name": "Торговля оптовая неспециализированная",
             "revenue": 800_000,
             "declared_profit": -150_000,
             "employees": 4,
@@ -155,6 +191,18 @@ async def seed() -> None:
             db.add(product)
             products[item["code"]] = product
 
+        existing_okveds = (await db.scalars(select(Okved))).all()
+        okveds: dict[str, Okved] = {
+            okved.code: okved for okved in existing_okveds
+        }
+        for item in OKVEDS:
+            if item["code"] in okveds:
+                continue
+            okved = Okved(**item)
+            db.add(okved)
+            okveds[item["code"]] = okved
+        await db.flush()
+
         users: dict[str, User] = {}
         for item in USERS:
             user = User(
@@ -168,7 +216,16 @@ async def seed() -> None:
             users[item["email"]] = user
             company_data = item.get("company")
             if company_data:
-                db.add(Company(user_id=user.id, **company_data))
+                data = dict(company_data)
+                legal_form = data.pop("legal_form")
+                okved_code = data.pop("okved")
+                data["okved"] = okveds[okved_code]
+                company_class = (
+                    LLCCompany
+                    if legal_form == "OOO"
+                    else IndividualEntrepreneur
+                )
+                db.add(company_class(user_id=user.id, **data))
 
         await db.commit()
         logger.info(

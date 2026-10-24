@@ -38,8 +38,11 @@ import {
   formatCompactMoney,
   formatDate,
   formatMoney,
+  legalFormLabel,
   pluralMonths,
   pluralYears,
+  registrationNumberLabel,
+  registryLabel,
   scoreTone,
 } from "@/lib/format";
 import type { ApplicationListItem, ApplicationStatus } from "@/lib/types";
@@ -93,7 +96,8 @@ function DashboardContent() {
   ).length;
   const approvedTotal = approved.reduce(
     (sum, application) =>
-      sum + (application.approved_amount ?? application.amount),
+      sum +
+      (application.approval?.approved_amount ?? application.amount),
     0,
   );
 
@@ -269,21 +273,24 @@ function DashboardContent() {
                     <Building2 className="h-5 w-5" />
                   </div>
                   <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-white/60">
-                    ЕГРЮЛ
+                    {registryLabel(company.legal_form)} ·{" "}
+                    {legalFormLabel(company.legal_form)}
                   </span>
                 </div>
                 <h3 className="mt-4 text-lg font-semibold leading-snug">
                   {company.name}
                 </h3>
                 <div className="mt-1 text-sm text-white/45">
-                  ИНН {company.inn} · ОГРН {company.ogrn || "не указан"}
+                  ИНН {company.inn} ·{" "}
+                  {registrationNumberLabel(company.legal_form)}{" "}
+                  {company.ogrn || "не указан"}
                 </div>
               </div>
               <div className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-4 text-sm">
                   <span className="text-muted-foreground">ОКВЭД</span>
                   <span className="max-w-[210px] text-right text-sm font-medium text-foreground">
-                    {company.okved} · {company.okved_name}
+                    {company.okved.code} · {company.okved.name}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3">

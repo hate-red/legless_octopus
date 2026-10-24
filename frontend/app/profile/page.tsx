@@ -38,7 +38,9 @@ import {
   formatDate,
   formatMoney,
   formatNumber,
+  legalFormLabel,
   pluralYears,
+  registrationNumberLabel,
 } from "@/lib/format";
 import type { ApplicationListItem, ApplicationStatus } from "@/lib/types";
 
@@ -90,7 +92,8 @@ function ProfileContent() {
   );
   const approvedTotal = approved.reduce(
     (sum, application) =>
-      sum + (application.approved_amount ?? application.amount),
+      sum +
+      (application.approval?.approved_amount ?? application.amount),
     0,
   );
 
@@ -147,13 +150,22 @@ function ProfileContent() {
                         variant="outline"
                         className="border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
                       >
+                        {legalFormLabel(company.legal_form)}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="border-white/10 bg-white/5 text-white/60"
+                      >
                         Клиент банка
                       </Badge>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/50">
                       <span>ИНН {company.inn}</span>
-                      <span>ОГРН {company.ogrn || "не указан"}</span>
-                      <span>ОКВЭД {company.okved}</span>
+                      <span>
+                        {registrationNumberLabel(company.legal_form)}{" "}
+                        {company.ogrn || "не указан"}
+                      </span>
+                      <span>ОКВЭД {company.okved.code}</span>
                     </div>
                   </div>
                 </div>
@@ -219,13 +231,13 @@ function ProfileContent() {
                   <DataRow label="Наименование" value={company.name} />
                   <DataRow label="ИНН" value={company.inn} mono />
                   <DataRow
-                    label="ОГРН"
+                    label={registrationNumberLabel(company.legal_form)}
                     value={company.ogrn || "Не указан"}
                     mono={Boolean(company.ogrn)}
                   />
-                  <DataRow label="ОКВЭД" value={company.okved} mono />
+                  <DataRow label="ОКВЭД" value={company.okved.code} mono />
                   <div className="sm:col-span-2">
-                    <DataRow label="Вид деятельности" value={company.okved_name} />
+                    <DataRow label="Вид деятельности" value={company.okved.name} />
                   </div>
                   <DataRow
                     label="Просрочки"

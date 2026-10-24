@@ -163,13 +163,16 @@ function ApplicationDetailContent() {
   const application = applicationQuery.data;
   const isProcessing = PROCESSING.has(application.status);
   const isActionPending = actionMutation.isPending;
+  const approval = application.approval;
   const approvedAmount =
-    application.approved_amount ??
+    approval?.approved_amount ??
     (application.status === "COUNTER_OFFER"
       ? (application.counter_offer_amount ?? application.amount)
       : application.amount);
-  const approvedTerm = application.approved_term_months ?? application.term_months;
-  const approvedRate = application.approved_rate ?? application.product.base_rate;
+  const approvedTerm =
+    approval?.approved_term_months ?? application.term_months;
+  const approvedRate =
+    approval?.approved_rate ?? application.product.base_rate;
   const scoring = application.scoring_result;
 
   return (
@@ -256,7 +259,9 @@ function ApplicationDetailContent() {
                   Решение
                 </div>
                 <div className="text-sm font-medium text-foreground">
-                  {application.decision ? statusLabel(application.decision) : "В обработке"}
+                  {application.decision
+                    ? statusLabel(application.decision.decision)
+                    : "В обработке"}
                 </div>
               </div>
             </div>
@@ -521,13 +526,13 @@ function ApplicationDetailContent() {
                   }
                 />
               ) : null}
-              {application.approved_amount &&
+              {application.approval?.approved_amount &&
               application.status !== "COUNTER_OFFER" ? (
                 <InfoRow
                   label="Одобренная сумма"
                   value={
                     <span className="text-emerald-700">
-                      {formatMoney(application.approved_amount)}
+                      {formatMoney(application.approval.approved_amount)}
                     </span>
                   }
                 />
@@ -641,7 +646,9 @@ function ActionPanel({
 
   if (application.status === "COUNTER_OFFER") {
     const counterAmount =
-      application.counter_offer_amount ?? application.approved_amount ?? 0;
+      application.counter_offer_amount ??
+      application.approval?.approved_amount ??
+      0;
     return (
       <div className="animate-fade-up overflow-hidden rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-card to-amber-50/40 shadow-card dark:border-amber-900 dark:from-amber-950/40 dark:via-card dark:to-amber-950/20">
         <div className="p-5 sm:p-6">
@@ -658,7 +665,7 @@ function ActionPanel({
                   Банк готов одобрить кредит на комфортную для вас сумму
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                  {application.decision_reason ??
+                  {application.decision?.decision_reason ??
                     "Мы рассчитали сумму, при которой долговая нагрузка останется в комфортном диапазоне."}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
@@ -854,7 +861,7 @@ function ActionPanel({
               По заявке принято отрицательное решение
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              {application.decision_reason ??
+              {application.decision?.decision_reason ??
                 "К сожалению, заявка не соответствует условиям кредитования."}
             </p>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
@@ -882,7 +889,7 @@ function ActionPanel({
               Заявку проверяет кредитный менеджер
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              {application.decision_reason ??
+              {application.decision?.decision_reason ??
                 "Автоматические проверки выявили спорный фактор. Решение примет менеджер банка."}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
