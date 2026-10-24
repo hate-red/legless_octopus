@@ -10,16 +10,16 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.config import settings  # noqa: E402
-from app.database import Base  # noqa: E402
-from app import models  # noqa: E402,F401
+from app.config import settings, get_db_url
+from app.database import Base
+from app import models
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", get_db_url().replace("%", "%%"))
 
 target_metadata = Base.metadata
 

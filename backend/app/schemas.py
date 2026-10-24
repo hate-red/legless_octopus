@@ -89,6 +89,22 @@ class ClientProfileOut(BaseModel):
     company: CompanyOut | None = None
 
 
+class IndividualEntrepreneurOut(BaseModel):
+    full_name: str
+    inn: str
+    ogrnip: str
+    user: UserOut
+    okved: OkvedOut
+
+
+class LLCCompanyOut(BaseModel):
+    name: str
+    inn: str
+    ogrn: str
+    user: UserOut
+    okved: OkvedOut
+
+
 class FinancialVerificationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -114,7 +130,6 @@ class AICheckOut(BaseModel):
 
     is_purpose_valid: bool
     ai_comment: str
-    similarity_score: float
 
 
 class ScoringFactorOut(BaseModel):
