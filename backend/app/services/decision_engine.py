@@ -18,7 +18,7 @@ from app.models import (
     LLCCompany,
     Product,
 )
-from app.services.ai_service import AICheckResult
+from app.services.scoring.ai_service import AICheckResult
 
 
 def _money(value: float) -> str:

@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from app.services.ai_service import AICheckResult
+from app.services.scoring.ai_service import AICheckResult
 from app.services.decision_engine import make_decision
 
 
