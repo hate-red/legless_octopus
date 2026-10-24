@@ -179,9 +179,11 @@ USERS = [
 
 
 async def seed() -> None:
+    from app.services.cabinet_seed import seed_cabinet_documents
     async with AsyncSessionLocal() as db:
         user_count = await db.scalar(select(func.count(User.id)))
         if user_count:
+            await seed_cabinet_documents(db)
             logger.info("Данные уже существуют — seed пропущен.")
             return
 
@@ -300,6 +302,7 @@ async def seed() -> None:
                 loaded.score,
             )
 
+        await seed_cabinet_documents(db)
         logger.info("Seed завершён успешно.")
 
 
