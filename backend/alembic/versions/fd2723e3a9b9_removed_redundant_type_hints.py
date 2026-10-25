@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 revision: str = 'fd2723e3a9b9'
-down_revision: Union[str, None] = '0004_okved_reference'
+down_revision: Union[str, None] = '0005_cabinet_documents'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

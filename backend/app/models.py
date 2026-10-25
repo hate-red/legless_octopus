@@ -378,8 +378,8 @@ class CompanyDocument(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     period: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    size: Mapped[int] = mapped_column(Integer, nullable=False)
-    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    size: Mapped[int] = mapped_column(nullable=False)
+    is_current: Mapped[bool] = mapped_column(nullable=False, default=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

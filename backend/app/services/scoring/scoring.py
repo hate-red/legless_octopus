@@ -14,6 +14,7 @@ from app.services.scoring.processing_utils import (
 )
 import app.services.scoring.processing_utils as utils
 
+
 def calculate_score(
     *,
     company: IndividualEntrepreneur | LLCCompany,
