@@ -19,7 +19,6 @@ def decide(*, score: int, overdue_count: int):
         ),
         ai=AICheckResult(
             is_valid=True,
-            similarity_score=0.9,
             comment="Цель соответствует профилю компании.",
         ),
         company=SimpleNamespace(),

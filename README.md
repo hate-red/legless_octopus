@@ -18,7 +18,7 @@ docker compose up --build
 | ReDoc | http://localhost:8000/redoc |
 | PostgreSQL | `localhost:5432` (по умолчанию) |
 
-> Первая сборка занимает больше обычного: в Docker-образ backend скачивается CPU-версия PyTorch и локальная модель `paraphrase-multilingual-MiniLM-L12-v2` (~500 МБ). Модель предзагружается на этапе сборки, поэтому во время демонстрации внешний интернет не нужен.
+> Первая сборка занимает больше обычного: в Docker-образ backend скачивается локальная GGUF-модель `gemma-4-E4B_q4_0-it.gguf` (~5.1 ГБ) и CPU-wheel `llama-cpp-python`. Модель предзагружается на этапе сборки, поэтому во время демонстрации внешний интернет не нужен.
 
 ---
 
@@ -78,7 +78,7 @@ docker compose up --build
   - данные клиента и ЕГРЮЛ;
   - финансовая проверка: заявлено vs ГИР БО;
   - БКИ: рейтинг, просрочки, платежи, дисциплина, DTI;
-  - ИИ-проверка: вердикт, комментарий, процент сходства;
+  - ИИ-проверка: вердикт и комментарий локальной LLM;
   - скоринг: факторы, баллы, DTI;
   - история решений.
 - Решения: «Одобрить», «Отклонить», «На доп. информацию» — только для заявок в `MANUAL_REVIEW`.
@@ -117,7 +117,7 @@ docker compose up --build
 │  ├── Scoring + DTI           │
 │  └── Decision Engine         │
 │                              │
-│ sentence-transformers (CPU)  │
+│ llama.cpp + Gemma 4 (CPU)    │
 └──────────────┬───────────────┘
                │ asyncpg
 ┌──────────────▼───────────────┐
@@ -154,7 +154,7 @@ docker compose up --build
 
 1. Войти как `client1@example.com`.
 2. Открыть заявку **#1** по продукту «С залогом» на 1 000 000 ₽.
-3. Убедиться в статусе **APPROVED**: скор 100, DTI 4.1%, ИИ-сходство 59.75%.
+3. Убедиться в статусе **APPROVED**: скор 100, DTI 4.1%, ИИ-проверка цели пройдена.
 4. Нажать **«Подтвердить условия»** → статус `CONTRACT_SIGNING`.
 5. Нажать **«Подписать договор»** → статус `DISBURSED`, деньги на счёте.
 
@@ -281,19 +281,18 @@ comfortable_amount = max_monthly_payment * term_months / 1.2
 
 ## ИИ-проверка цели
 
-Сервис: `backend/app/services/ai_service.py`.
+Сервис: `backend/app/services/scoring/ai_service.py`.
 
-- Модель: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
-- Инференс: локальный CPU, без внешних API.
-- Стоп-темы: казино, криптовалюта/майнинг, оружие, наркотики, букмекерство, азартные игры, обналичивание.
-- Косинусное сходство цели с профилем ОКВЭД.
-- Порог: **0.5** (настраивается `AI_SIMILARITY_THRESHOLD`).
-- Для устойчивости коротких формулировок («Покупка серверов» ↔ «Разработка ПО») сходство считается по названию ОКВЭД и короткому отраслевому профилю; берётся максимум. Это не меняет порог 0.5, но даёт модели бизнес-контекст.
-- Если модель недоступна (например, лёгкий локальный запуск без PyTorch), используется детерминированный keyword-fallback; в комментарии это явно указывается.
-- Модель предзагружается в Dockerfile на этапе сборки.
+- Модель: `google/gemma-4-E4B-it-qat-q4_0-gguf`, файл `gemma-4-E4B_q4_0-it.gguf` (~5.1 ГБ).
+- Инференс: локальный CPU через `llama-cpp-python`, без внешних API.
+- Промпт: `backend/ai_models/prompt.md`.
+- Модель отвечает строго в JSON: `{"is_valid": bool, "comment": str}`.
+- Загрузка модели выполняется один раз на процесс; параллельные проверки сериализуются, чтобы не обращаться к одному контексту llama.cpp одновременно.
+- Если модель недоступна, заявка **не одобряется автоматически**: AI-проверка фиксируется как неуспешная, и Decision Engine направляет её на ручную проверку.
+- В Docker модель запекается в образ на этапе сборки, поэтому в демонстрации внешний интернет не нужен.
 
 Результат сохраняется в `ai_checks`:
-`is_purpose_valid`, `similarity_score`, `ai_comment`.
+`is_purpose_valid`, `ai_comment`.
 
 ---
 
@@ -438,21 +437,27 @@ Authorization: Bearer <access_token>
 │   │   │   ├── applications.py
 │   │   │   ├── auth.py
 │   │   │   ├── bank.py
+│   │   │   ├── cabinet.py
 │   │   │   ├── mock.py
 │   │   │   └── products.py
 │   │   └── services/
-│   │       ├── ai_service.py
 │   │       ├── application_outcomes.py
 │   │       ├── application_queries.py
+│   │       ├── cabinet_seed.py
 │   │       ├── companies.py
 │   │       ├── decision_engine.py
+│   │       ├── formatting.py
 │   │       ├── integrations.py
 │   │       ├── mock_data.py
 │   │       ├── okveds.py
 │   │       ├── orchestrator.py
-│   │       ├── scoring.py
+│   │       ├── scoring/
+│   │       │   ├── ai_service.py
+│   │       │   ├── processing_utils.py
+│   │       │   └── scoring.py
 │   │       └── state_machine.py
 │   ├── tests/
+│   │   ├── test_cabinet_api.py
 │   │   ├── test_company_outcomes.py
 │   │   └── test_decision_engine.py
 │   ├── alembic/
@@ -462,7 +467,10 @@ Authorization: Bearer <access_token>
 │   │       ├── 0001_initial.py
 │   │       ├── 0002_product_categories.py
 │   │       ├── 0003_company_forms_outcomes.py
-│   │       └── 0004_okved_reference.py
+│   │       ├── 0004_okved_reference.py
+│   │       ├── 0005_cabinet_documents.py
+│   │       ├── 0006_merge_heads.py
+│   │       └── fd2723e3a9b9_removed_redundant_type_hints.py
 │   ├── alembic.ini
 │   ├── Dockerfile
 │   ├── entrypoint.sh
@@ -509,9 +517,9 @@ Docker Compose уже содержит безопасные значения п�
 | `JWT_SECRET` | демо-значение | Подпись JWT; заменить в production |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440` | Время жизни токена |
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Разрешённые origin |
-| `AI_ENABLED` | `true` | Включить sentence-transformers |
-| `AI_SIMILARITY_THRESHOLD` | `0.5` | Порог ИИ-проверки |
-| `AI_MODEL_NAME` | `paraphrase-multilingual-MiniLM-L12-v2` | Модель |
+| `AI_MODEL_REPO_ID` | `google/gemma-4-E4B-it-qat-q4_0-gguf` | Репозиторий GGUF-модели |
+| `AI_MODEL_FILENAME` | `gemma-4-E4B_q4_0-it.gguf` | Файл модели |
+| `AI_N_CTX` | `2048` | Размер контекста llama.cpp |
 
 Backend также читает `backend/.env` — см. `backend/.env.example`.
 
@@ -519,7 +527,7 @@ Backend также читает `backend/.env` — см. `backend/.env.example`.
 
 ## База данных и миграции
 
-Миграция `0005_cabinet_documents` добавляет реквизиты компании, версии PDF, ссылки документов на заявки, мягкое удаление черновиков и отметки уведомлений. Данные существующих заявок сохраняются. Seed добавляет явно подписанные демо-PDF для тестовых компаний.
+Миграция `0005_cabinet_documents` добавляет реквизиты компании, версии PDF, ссылки документов на заявки, мягкое удаление черновиков и отметки уведомлений. Миграция `fd2723e3a9b9` удаляет устаревшее поле `similarity_score` и выравнивает типы. Пустая merge-миграция `0006_merge_heads` склеивает две ветки Alembic; схема БД при этом не меняется. Seed добавляет явно подписанные демо-PDF для тестовых компаний.
 
 - PostgreSQL 15 в Docker.
 - Схема создаётся Alembic-миграцией `0001_initial`, категории продуктов и их параметры — миграцией `0002_product_categories`. Продукты переименовываются на месте, поэтому `product_id` существующих заявок сохраняются.
@@ -553,16 +561,15 @@ API-интеграция: задайте `CABINET_TEST_URL` с адресом о
 docker compose exec backend python -m unittest discover -s tests -v
 ```
 
-Проверяются два сценария:
+Проверяются сценарии Decision Engine, скоринга (базовая оценка, CAP, DTI) и сериализации факторов.
 
-- `overdue_count = 1` при скоре 100 → **REJECTED** (жёсткая блокировка сильнее скоринга);
-- `overdue_count = 0` при скоре 100 → **APPROVED** (контрольный сценарий без просрочек).
+Для Playwright можно выбрать установленный браузер через `PLAYWRIGHT_CHANNEL` (например, `chrome` или `chromium`); по умолчанию используется браузер, установленный Playwright.
 
 ---
 
 ## Локальная разработка без Docker
 
-Понадобится PostgreSQL 15+ и Python 3.11.
+Понадобится PostgreSQL 15+ и Python 3.12.
 
 ### Backend
 
@@ -578,7 +585,7 @@ python -m app.seed
 uvicorn app.main:app --reload --port 8000
 ```
 
-Если не устанавливать PyTorch / sentence-transformers, приложение продолжит работать в эвристическом fallback-режиме. Для полной демонстрации установите зависимости из `requirements.txt`.
+При первом локальном запуске backend скачает GGUF-модель (~5.1 ГБ), если её ещё нет в `backend/ai_models`. Для работы ИИ-проверки нужны зависимости из `requirements.txt`; без доступной модели заявки будут направляться на ручную проверку, а не одобряться автоматически.
 
 ### Frontend
 
@@ -628,7 +635,7 @@ curl -s http://localhost:8000/api/mock/bki/7701234567
 ## Диагностика
 
 **`docker compose up` долго собирается.**  
-Ожидаемо: PyTorch CPU + модель. Последующие запуски используют кэш слоёв Docker.
+Ожидаемо: скачивание GGUF-модели (~5.1 ГБ) и CPU-wheel `llama-cpp-python`. Последующие запуски используют кэш слоёв Docker; код пересобирается без повторной загрузки модели.
 
 **Backend unhealthy.**  
 Проверьте логи:
@@ -642,7 +649,9 @@ docker compose logs -f backend
 **Порт 3000/8000 занят.**
 
 ```bash
-FRONTEND_PORT=3100 BACKEND_PORT=8100 docker compose up --build
+POSTGRES_PORT=5433 FRONTEND_PORT=3100 BACKEND_PORT=8100 \
+CORS_ORIGINS=http://localhost:3100,http://127.0.0.1:3100 \
+APP_ORIGIN=http://localhost:3100 docker compose up --build
 ```
 
 При локальной разработке и смене порта API задайте `BACKEND_URL=http://127.0.0.1:8100/api` в `frontend/.env.local`. В Docker Compose используется внутренний адрес backend:8000.
@@ -651,7 +660,7 @@ FRONTEND_PORT=3100 BACKEND_PORT=8100 docker compose up --build
 Браузер обращается к Next.js `/api/backend`. `BACKEND_URL` должен быть доступен серверу Next.js; при изменении переменной перезапустите frontend.
 
 **Модель не загрузилась.**  
-Проверьте `docker compose logs backend | grep -i модель`. Приложение продолжит работать с fallback и явно укажет это в комментарии ИИ-проверки.
+Проверьте `docker compose logs backend | grep -i модель`. Приложение продолжит работать: заявки с недоступной ИИ-проверкой будут направляться на ручную проверку, а не одобряться автоматически.
 
 ---
 

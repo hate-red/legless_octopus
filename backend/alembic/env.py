@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.config import settings, get_db_url
+from app.config import get_db_url
 from app.database import Base
 from app import models
 

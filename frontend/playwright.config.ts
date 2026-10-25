@@ -4,10 +4,10 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 60000,
-  expect: { timeout: 15000 },
+  expect: { timeout: 45000 },
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3100",
-    channel: "msedge",
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
     headless: true,
     viewport: { width: 1280, height: 920 },
     trace: "retain-on-failure",

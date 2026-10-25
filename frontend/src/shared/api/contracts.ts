@@ -106,7 +106,6 @@ export interface ApplicationDetail extends Application {
   ai_check: {
     is_purpose_valid: boolean;
     ai_comment: string;
-    similarity_score: number;
   } | null;
   scoring_result: {
     score: number;

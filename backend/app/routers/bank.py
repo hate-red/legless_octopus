@@ -24,13 +24,10 @@ from app.services.application_queries import (
     load_application,
     reload_application,
 )
+from app.services.formatting import format_money
 from app.services.state_machine import transition
 
 router = APIRouter(prefix="/bank", tags=["bank"])
-
-
-def _money(value: float) -> str:
-    return f"{value:,.0f}".replace(",", " ") + " ₽"
 
 
 @router.get("/applications", response_model=list[ApplicationListItem])
@@ -137,7 +134,7 @@ async def make_bank_decision(
                 status_code=400,
                 detail=(
                     "Одобренная сумма ниже минимальной суммы продукта "
-                    f"({_money(application.product.min_amount)})"
+                    f"({format_money(application.product.min_amount)})"
                 ),
             )
         if approved_amount > application.product.max_amount:
@@ -145,7 +142,7 @@ async def make_bank_decision(
                 status_code=400,
                 detail=(
                     "Одобренная сумма выше максимальной суммы продукта "
-                    f"({_money(application.product.max_amount)})"
+                    f"({format_money(application.product.max_amount)})"
                 ),
             )
         if not (
@@ -160,7 +157,7 @@ async def make_bank_decision(
 
         reason = comment or (
             "Банк одобрил заявку по итогам ручной проверки. "
-            f"Сумма {_money(approved_amount)}, срок {approved_term} мес., "
+            f"Сумма {format_money(approved_amount)}, срок {approved_term} мес., "
             f"ставка {approved_rate}%."
         )
         set_decision(application, "APPROVED", reason)

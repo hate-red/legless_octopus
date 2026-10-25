@@ -11,7 +11,7 @@ from app import __version__
 from app.config import settings
 from app.database import engine, get_db
 from app.routers import applications, auth, bank, cabinet, mock, products
-from app.services.scoring.ai_service import load_llm
+from app.services.scoring.ai_service import warmup_ai
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Запуск %s v%s", settings.app_name, __version__)
-    warmup_task = asyncio.create_task(load_llm())
+    warmup_task = asyncio.create_task(warmup_ai())
     yield
     if not warmup_task.done():
         warmup_task.cancel()

@@ -2,7 +2,10 @@
 import { chromium, request } from "@playwright/test";
 const baseURL = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 (async () => {
-  const browser = await chromium.launch({ channel: "msedge", headless: true });
+  const browser = await chromium.launch({
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
+    headless: true,
+  });
   const failures = [];
   try {
     const anonymous = await request.newContext({ baseURL });

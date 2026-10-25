@@ -28,14 +28,11 @@ from app.services.application_queries import (
     load_application,
     reload_application,
 )
+from app.services.formatting import format_money
 from app.services.orchestrator import run_orchestrator
 from app.services.state_machine import transition
 
 router = APIRouter(prefix="/applications", tags=["client-applications"])
-
-
-def _money(value: float) -> str:
-    return f"{value:,.0f}".replace(",", " ") + " ₽"
 
 
 async def _get_owned_application(
@@ -226,7 +223,7 @@ async def confirm_conditions(
         STATUS_CONTRACT_SIGNING,
         comment=(
             "Клиент подтвердил условия кредита: "
-            f"{_money(approved_amount)}, "
+            f"{format_money(approved_amount)}, "
             f"{approved_term} мес., "
             f"ставка {approved_rate}%."
         ),
@@ -275,7 +272,7 @@ async def accept_counter_offer(
         STATUS_CONTRACT_SIGNING,
         comment=(
             "Клиент принял встречное предложение на сумму "
-            f"{_money(application.counter_offer_amount)}."
+            f"{format_money(application.counter_offer_amount)}."
         ),
         actor_role="client",
     )
@@ -339,7 +336,7 @@ async def sign_contract(
         STATUS_DISBURSED,
         comment=(
             "Договор подписан. Средства перечислены на расчётный счёт клиента. "
-            f"Сумма: {_money(approved_amount)}."
+            f"Сумма: {format_money(approved_amount)}."
         ),
         actor_role="client",
     )

@@ -5,7 +5,7 @@ import sys
 import asyncpg
 from sqlalchemy.engine import make_url
 
-from app.config import settings, get_db_url
+from app.config import get_db_url
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger("wait-for-db")

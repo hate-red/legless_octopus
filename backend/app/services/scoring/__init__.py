@@ -1,4 +1,4 @@
-"""Public scoring API, shared by orchestration and tests."""
-from .engine import calculate_dti, calculate_score
+from app.services.scoring.processing_utils import calculate_dti
+from app.services.scoring.scoring import calculate_score
 
 __all__ = ["calculate_dti", "calculate_score"]

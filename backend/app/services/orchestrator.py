@@ -23,11 +23,12 @@ from app.models import (
     ScoringResult,
 )
 from app.services import integrations
-from app.services.scoring.ai_service import LLMPuproseChecker
 from app.services.application_outcomes import set_approval, set_decision
 from app.services.companies import get_company_for_user
 from app.services.decision_engine import make_decision
+from app.services.formatting import format_money
 from app.services.okveds import get_or_create_okved
+from app.services.scoring.ai_service import AICheckResult, get_checker
 from app.services.scoring.scoring import calculate_score
 from app.services.state_machine import transition
 
@@ -40,22 +41,18 @@ def _diff_pct(value: float, reference: float) -> float:
     return round((value - reference) / abs(reference) * 100, 1)
 
 
-def _money(value: float) -> str:
-    return f"{value:,.0f}".replace(",", " ") + " ₽"
-
-
 def _validate_limits(application: Application) -> list[str]:
     product = application.product
     errors: list[str] = []
     if application.amount < product.min_amount:
         errors.append(
-            f"Сумма {_money(application.amount)} ниже минимальной "
-            f"{_money(product.min_amount)}"
+            f"Сумма {format_money(application.amount)} ниже минимальной "
+            f"{format_money(product.min_amount)}"
         )
     if application.amount > product.max_amount:
         errors.append(
-            f"Сумма {_money(application.amount)} выше максимальной "
-            f"{_money(product.max_amount)}"
+            f"Сумма {format_money(application.amount)} выше максимальной "
+            f"{format_money(product.max_amount)}"
         )
     if application.term_months < product.min_term_months:
         errors.append(
@@ -146,14 +143,14 @@ async def run_orchestrator(
     if abs(revenue_diff) > 15:
         flags.append(
             "Расхождение выручки: заявлено "
-            f"{_money(company.revenue)}, по ГИР БО {_money(official_revenue)} "
+            f"{format_money(company.revenue)}, по ГИР БО {format_money(official_revenue)} "
             f"({revenue_diff:+.1f}%)."
         )
     if abs(profit_diff) > 20:
         flags.append(
             "Расхождение прибыли: заявлено "
-            f"{_money(company.declared_profit)}, по ГИР БО "
-            f"{_money(official_profit)} ({profit_diff:+.1f}%)."
+            f"{format_money(company.declared_profit)}, по ГИР БО "
+            f"{format_money(official_profit)} ({profit_diff:+.1f}%)."
         )
     if official_profit < 0:
         flags.append("Отрицательная прибыль по данным ГИР БО.")
@@ -186,14 +183,27 @@ async def run_orchestrator(
         db,
         application,
         STATUS_AI_PURPOSE_CHECK,
-        comment="Проверка цели кредита локальной семантической моделью.",
+        comment="Проверка цели кредита локальной LLM.",
     )
 
-    llm_checker = LLMPuproseChecker()
-    ai_result = await llm_checker.check_purpose(
-        purpose=application.purpose,
-        okved=company.okved.name,
-    )
+    try:
+        llm_checker = await get_checker()
+        ai_result = await llm_checker.check_purpose(
+            purpose=application.purpose,
+            okved=company.okved.name,
+        )
+    except Exception:
+        logger.exception(
+            "ИИ-проверка недоступна для заявки #%s; требуется ручная проверка",
+            application.id,
+        )
+        ai_result = AICheckResult(
+            is_valid=False,
+            comment=(
+                "ИИ-проверка временно недоступна. "
+                "Заявка направлена на ручную проверку."
+            ),
+        )
     ai_check = AICheck(
         application_id=application.id,
         is_purpose_valid=ai_result.is_valid,

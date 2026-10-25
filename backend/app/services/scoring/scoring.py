@@ -2,17 +2,17 @@ from app.models import (
     BKICheck,
     FinancialVerification,
     IndividualEntrepreneur,
-    LLCCompany
+    LLCCompany,
 )
+from app.services.scoring import processing_utils as utils
 from app.services.scoring.ai_service import AICheckResult
-
 from app.services.scoring.processing_utils import (
-    Factor, 
-    ScoreBoundaries, 
-    FactorType, 
-    LabelType, 
+    Factor,
+    FactorType,
+    LabelType,
+    ScoreBoundaries,
 )
-import app.services.scoring.processing_utils as utils
+
 
 def calculate_score(
     *,
@@ -24,9 +24,18 @@ def calculate_score(
     term_months: int,
 ) -> tuple[int, list[Factor], float]:
     """Apply the scoring formula. Returns score, factors, DTI."""
-    factors: list[Factor] = []
-    raw_score = ScoreBoundaries.BASE_SCORE
-    
+    base_score = int(ScoreBoundaries.BASE_SCORE)
+    factors: list[Factor] = [
+        Factor(
+            factor_type=FactorType.BASE,
+            label=LabelType.BASE,
+            value="—",
+            points=base_score,
+            description="Стартовое значение скоринговой модели",
+        )
+    ]
+    raw_score = base_score
+
     dti, _ = utils.calculate_dti(
         amount=amount,
         term_months=term_months,
@@ -46,19 +55,24 @@ def calculate_score(
 
     for value, func in value_func_mapping:
         points, factor = func(value)
-        
         raw_score += points
         factors.append(factor)
-    
-    score = max(ScoreBoundaries.MIN_SCORE, min(ScoreBoundaries.MAX_SCORE, raw_score))
+
+    min_score = int(ScoreBoundaries.MIN_SCORE)
+    max_score = int(ScoreBoundaries.MAX_SCORE)
+    score = max(min_score, min(max_score, raw_score))
     if score != raw_score:
-        factors.append(Factor(
-            factor_type=FactorType.CAP,
-            label=LabelType.CAP,
-            value=f"{raw_score} -> {score}",
-            points=score - raw_score,
-            description = f"Итоговый скор ограничен диапазоном "
-                          f"{ScoreBoundaries.MIN_SCORE}–{ScoreBoundaries.MAX_SCORE}"
-        ))
+        factors.append(
+            Factor(
+                factor_type=FactorType.CAP,
+                label=LabelType.CAP,
+                value=f"{raw_score} → {score}",
+                points=score - raw_score,
+                description=(
+                    "Итоговый скор ограничен диапазоном "
+                    f"{min_score}–{max_score}"
+                ),
+            )
+        )
 
     return score, factors, dti

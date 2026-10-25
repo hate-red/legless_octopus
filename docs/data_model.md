@@ -1,7 +1,7 @@
 # Модель данных
 
 СУБД: **PostgreSQL 15**. ORM: SQLAlchemy 2.0 (async, `asyncpg`).  
-Миграции: `backend/alembic/versions/0001_initial.py`, `backend/alembic/versions/0002_product_categories.py`, `backend/alembic/versions/0003_company_forms_outcomes.py`, `backend/alembic/versions/0004_okved_reference.py`.
+Миграции: `backend/alembic/versions/0001_initial.py` … `0005_cabinet_documents.py`, `fd2723e3a9b9_removed_redundant_type_hints.py` и merge-миграция `0006_merge_heads.py`.
 
 ## ER-диаграмма
 
@@ -131,7 +131,6 @@ erDiagram
         int application_id FK, UK
         bool is_purpose_valid
         text ai_comment
-        float similarity_score
     }
     SCORING_RESULTS {
         int id PK
@@ -187,7 +186,7 @@ erDiagram
 | `DRAFT` | Черновик, редактируется клиентом |
 | `VALIDATION` | Проверка лимитов продукта |
 | `ENRICHMENT` | Получение данных ЕГРЮЛ / ГИР БО / БКИ |
-| `AI_PURPOSE_CHECK` | Семантическая проверка цели |
+| `AI_PURPOSE_CHECK` | Проверка цели локальной LLM (llama.cpp + Gemma 4) |
 | `SCORING` | Расчёт скоринга и DTI |
 | `APPROVED` | Автоматическое или ручное одобрение |
 | `COUNTER_OFFER` | Банк предложил комфортную сумму |

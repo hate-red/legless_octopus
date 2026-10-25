@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:15-alpine
-    container_name: alfa_credit_db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-alfa_credit}
       POSTGRES_USER: ${POSTGRES_USER:-alfa}
@@ -25,16 +24,16 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: alfa_credit_backend
+      args:
+        AI_MODEL_REPO_ID: ${AI_MODEL_REPO_ID:-google/gemma-4-E4B-it-qat-q4_0-gguf}
+        AI_MODEL_FILENAME: ${AI_MODEL_FILENAME:-gemma-4-E4B_q4_0-it.gguf}
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-alfa}:${POSTGRES_PASSWORD:-alfa_secret}@db:5432/${POSTGRES_DB:-alfa_credit}
       JWT_SECRET: ${JWT_SECRET:-alfa-hackathon-secret-change-me}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
-      AI_ENABLED: ${AI_ENABLED:-true}
-      AI_MODEL_NAME: ${AI_MODEL_NAME:-paraphrase-multilingual-MiniLM-L12-v2}
-      AI_SIMILARITY_THRESHOLD: ${AI_SIMILARITY_THRESHOLD:-0.5}
-      MOCK_BASE_URL: http://127.0.0.1:8000
+      AI_MODEL_REPO_ID: ${AI_MODEL_REPO_ID:-google/gemma-4-E4B-it-qat-q4_0-gguf}
+      AI_MODEL_FILENAME: ${AI_MODEL_FILENAME:-gemma-4-E4B_q4_0-it.gguf}
       APP_ENV: ${APP_ENV:-docker}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -45,15 +44,14 @@ services:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
       interval: 10s
       timeout: 5s
-      retries: 12
-      start_period: 120s
+      retries: 30
+      start_period: 10s
     restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: alfa_credit_frontend
     environment:
       BACKEND_URL: http://backend:8000/api
       COOKIE_SECURE: ${COOKIE_SECURE:-false}

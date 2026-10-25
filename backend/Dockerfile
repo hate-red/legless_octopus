@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,8 +11,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# All Python dependencies are published as manylinux wheels, so a compiler is
-# not required. Keep the runtime image small and deterministic.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -24,8 +22,15 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
-# Pre-download the local semantic model so the container works offline at runtime.
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+# Bake the configured GGUF model into the image. requirements.txt pins the
+# prebuilt CPU wheel for llama-cpp-python, so no compiler is required.
+ARG AI_MODEL_REPO_ID=google/gemma-4-E4B-it-qat-q4_0-gguf
+ARG AI_MODEL_FILENAME=gemma-4-E4B_q4_0-it.gguf
+ENV AI_MODEL_REPO_ID=${AI_MODEL_REPO_ID} \
+    AI_MODEL_FILENAME=${AI_MODEL_FILENAME}
+
+RUN mkdir -p /app/ai_models \
+    && python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='${AI_MODEL_REPO_ID}', filename='${AI_MODEL_FILENAME}', local_dir='/app/ai_models')"
 
 # The model is now baked into the image; never attempt a runtime download.
 ENV HF_HUB_OFFLINE=1 \

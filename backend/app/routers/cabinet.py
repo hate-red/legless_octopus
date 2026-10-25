@@ -6,35 +6,34 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import STATUS_DRAFT, STATUS_LABELS
 from app.database import get_db
-from app.models import Application, ApplicationDocument, CompanyDocument, IndividualEntrepreneur, NotificationReceipt, Okved, StatusHistory, User
-from app.schemas import UserOut
+from app.models import (
+    Application,
+    ApplicationDocument,
+    CompanyDocument,
+    IndividualEntrepreneur,
+    NotificationReceipt,
+    Okved,
+    StatusHistory,
+    User,
+)
+from app.schemas import (
+    CompanyUpdate,
+    DocumentConfirmation,
+    NotificationsRead,
+    UserOut,
+)
 from app.security import get_current_user, require_client
 from app.services.application_queries import load_application
 
 router = APIRouter(tags=["cabinet"])
 KINDS = {"company": "Карточка компании", "statement": "Выписка по счёту", "finance": "Финансовая отчётность"}
 MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
-
-
-class CompanyUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    name: str = Field(min_length=1, max_length=255)
-    inn: str = Field(pattern=r"^(\d{10}|\d{12})$")
-    ogrn: str = Field(pattern=r"^(\d{13}|\d{15})$")
-    okved_id: int
-    revenue: float = Field(ge=0, allow_inf_nan=False)
-    declared_profit: float = Field(allow_inf_nan=False)
-    employees: int = Field(ge=0, le=1_000_000)
-    business_age_months: int = Field(ge=0, le=2400)
-    contact_name: str = Field(min_length=1, max_length=255)
-    details: dict[str, str] = Field(default_factory=dict)
 
 
 @router.get("/company/okveds")
@@ -112,10 +111,6 @@ async def download_document(document_id: str, db: AsyncSession = Depends(get_db)
     return Response(document.content, media_type="application/pdf", headers={"Content-Disposition": f"inline; filename=document.pdf; filename*=UTF-8''{quote(document.filename, safe='')}", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
-class DocumentConfirmation(BaseModel):
-    document_ids: list[str] = Field(min_length=1, max_length=3)
-
-
 @router.post("/applications/{application_id}/documents/confirm")
 async def confirm_documents(application_id: int, payload: DocumentConfirmation, db: AsyncSession = Depends(get_db), user: User = Depends(require_client)):
     application = await load_application(db, application_id)
@@ -172,10 +167,6 @@ async def notifications(db: AsyncSession = Depends(get_db), user: User = Depends
     rows = (await db.scalars(visible_history(user).order_by(StatusHistory.created_at.desc(), StatusHistory.id.desc()).limit(50))).all()
     read_ids = set((await db.scalars(select(NotificationReceipt.history_id).where(NotificationReceipt.user_id == user.id))).all())
     return [{"id": row.id, "title": f"Заявка №{row.application_id}: {STATUS_LABELS.get(row.status, row.status)}", "message": row.comment, "application_id": row.application_id, "created_at": row.created_at, "read": row.id in read_ids} for row in rows]
-
-
-class NotificationsRead(BaseModel):
-    ids: list[int] = Field(max_length=50)
 
 
 @router.post("/notifications/read")

@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     ForeignKey,
     Index,
     DateTime,
+    Integer,
     LargeBinary,
     String,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declarative_mixin, mapped_column, relationship
@@ -371,9 +374,20 @@ class StatusHistory(Base):
 
 class CompanyDocument(Base):
     __tablename__ = "company_documents"
+    __table_args__ = (
+        Index(
+            "uq_company_documents_current_kind",
+            "owner_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("is_current = true"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     period: Mapped[str] = mapped_column(String(255), nullable=False, default="")

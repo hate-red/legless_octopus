@@ -18,11 +18,8 @@ from app.models import (
     LLCCompany,
     Product,
 )
+from app.services.formatting import format_money
 from app.services.scoring.ai_service import AICheckResult
-
-
-def _money(value: float) -> str:
-    return f"{value:,.0f}".replace(",", " ") + " ₽"
 
 
 @dataclass(slots=True)
@@ -77,7 +74,7 @@ def make_decision(
             status=STATUS_MANUAL_REVIEW,
             reason=(
                 "Жёсткая блокировка: отрицательная официальная прибыль по ГИР БО "
-                f"({_money(verification.official_profit)}). Требуется ручная проверка."
+                f"({format_money(verification.official_profit)}). Требуется ручная проверка."
             ),
         )
 
@@ -115,8 +112,8 @@ def make_decision(
                 status=STATUS_REJECTED,
                 reason=(
                     "Недостаточная кредитоспособность: комфортная сумма "
-                    f"{_money(comfortable)} ниже минимальной суммы продукта "
-                    f"{_money(product.min_amount)}."
+                    f"{format_money(comfortable)} ниже минимальной суммы продукта "
+                    f"{format_money(product.min_amount)}."
                 ),
             )
         return DecisionOutcome(
@@ -124,7 +121,7 @@ def make_decision(
             reason=(
                 f"Скор {score}, DTI по запрошенной сумме {dti_percent:.1f}%. "
                 "Банк готов одобрить кредит на комфортную сумму "
-                f"{_money(comfortable)}."
+                f"{format_money(comfortable)}."
             ),
             approved_term_months=term_months,
             approved_rate=round(product.base_rate + 1.0, 1),

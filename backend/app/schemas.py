@@ -227,5 +227,28 @@ class CounterOfferDeclineRequest(BaseModel):
     comment: str = Field(default="", max_length=2000)
 
 
+class CompanyUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=255)
+    inn: str = Field(pattern=r"^(\d{10}|\d{12})$")
+    ogrn: str = Field(pattern=r"^(\d{13}|\d{15})$")
+    okved_id: int
+    revenue: float = Field(ge=0, allow_inf_nan=False)
+    declared_profit: float = Field(allow_inf_nan=False)
+    employees: int = Field(ge=0, le=1_000_000)
+    business_age_months: int = Field(ge=0, le=2400)
+    contact_name: str = Field(min_length=1, max_length=255)
+    details: dict[str, str] = Field(default_factory=dict)
+
+
+class DocumentConfirmation(BaseModel):
+    document_ids: list[str] = Field(min_length=1, max_length=3)
+
+
+class NotificationsRead(BaseModel):
+    ids: list[int] = Field(max_length=50)
+
+
 class MessageResponse(BaseModel):
     message: str

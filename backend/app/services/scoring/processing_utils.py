@@ -2,35 +2,38 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import NamedTuple
 
+from app.services.formatting import format_money
 from app.services.scoring.ai_service import AICheckResult
 
 
 class ScoreBoundaries(int, Enum):
     BASE_SCORE = 50
-    MIN_SCORE  = 0
-    MAX_SCORE  = 100
+    MIN_SCORE = 0
+    MAX_SCORE = 100
 
 
 class FactorType(str, Enum):
-    REVENUE = "Revenue"
-    PROFIT = "Profit"
-    AGE = "Age"
-    BKI = "BKI"
-    OVERDUE = "Overdue"
-    DTI = "DTI"
-    AI = "AI"
-    CAP = "CAP"
+    BASE = "base"
+    REVENUE = "revenue"
+    PROFIT = "profit"
+    AGE = "age"
+    BKI = "bki"
+    OVERDUE = "overdue"
+    DTI = "dti"
+    AI = "ai"
+    CAP = "cap"
 
 
 class LabelType(str, Enum):
+    BASE = "Базовая оценка"
     REVENUE = "Выручка"
-    PROFIT = "Выручка"
+    PROFIT = "Прибыль"
     AGE = "Возраст бизнеса"
     BKI = "Скор БКИ"
     OVERDUE = "Просрочки"
     DTI = "DTI"
     AI = "ИИ-проверка цели"
-    CAP = f"Ограничение скора"
+    CAP = "Ограничение 0–100"
 
 
 @dataclass(slots=True)
@@ -41,15 +44,20 @@ class Factor:
     points: int
     description: str
 
-
-    def to_dict(self) -> dict:
-        return         {
-            "factor": self.factor_type,
-            "label": self.label,
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "factor": self.factor_type.value,
+            "label": self.label.value,
             "value": self.value,
             "points": self.points,
             "description": self.description,
         }
+
+
+class ProcessedValue(NamedTuple):
+    points: int
+    factor: Factor
+
 
 def calculate_dti(
     *,
@@ -69,79 +77,63 @@ def calculate_dti(
     return round(dti, 1), round(new_payment, 2)
 
 
-def _format_money(value: float) -> str:
-    return f"{value:,.0f}".replace(",", " ") + " ₽"
-
-
-class ProcessedValue(NamedTuple):
-    points: int
-    factor: Factor
-
-
 def process_revenue(revenue: float) -> ProcessedValue:
-    match revenue:
-        case revenue if revenue > 10_000_000:
-            points = 20
-            description = "Выручка по ГИР БО выше 10 млн ₽"
-
-        case revenue if revenue >= 1_000_000:
-            points = 10
-            description = "Выручка по ГИР БО от 1 до 10 млн ₽"
-
-        case _:
-            points = -10
-            description = "Выручка по ГИР БО менее 1 млн ₽"
+    if revenue > 10_000_000:
+        points = 20
+        description = "Выручка по ГИР БО выше 10 млн ₽"
+    elif revenue >= 1_000_000:
+        points = 10
+        description = "Выручка по ГИР БО от 1 до 10 млн ₽"
+    else:
+        points = -10
+        description = "Выручка по ГИР БО менее 1 млн ₽"
 
     return ProcessedValue(
-        points=points, 
+        points=points,
         factor=Factor(
             factor_type=FactorType.REVENUE,
             label=LabelType.REVENUE,
-            value=_format_money(revenue),
+            value=format_money(revenue),
             points=points,
-            description=description
-        )
+            description=description,
+        ),
     )
 
 
 def process_profit(profit: float) -> ProcessedValue:
-    match profit:
-        case profit if profit > 0:
-            points = 10
-            description = "Компания прибыльна по данным ГИР БО"
-        case profit if profit < 0:
-            points = -20
-            description = "Отрицательная прибыль по данным ГИР БО"
-        case _:
-            points = 0
-            description = "Нулевая прибыль по данным ГИР БО"
-    
+    if profit > 0:
+        points = 10
+        description = "Компания прибыльна по данным ГИР БО"
+    elif profit < 0:
+        points = -20
+        description = "Отрицательная прибыль по данным ГИР БО"
+    else:
+        points = 0
+        description = "Нулевая прибыль по данным ГИР БО"
+
     return ProcessedValue(
-        points=points, 
+        points=points,
         factor=Factor(
             factor_type=FactorType.PROFIT,
             label=LabelType.PROFIT,
-            value=_format_money(profit),
+            value=format_money(profit),
             points=points,
-            description=description
-        )
+            description=description,
+        ),
     )
 
 
 def process_age(age: int) -> ProcessedValue:
-    match age:
-        case age if age > 24:
-            points = 10
-            description = "Бизнес работает более 24 месяцев"
-        
-        case age if age < 12:
-            points = -15
-            description = "Бизнес работает менее 12 месяцев"
-        
-        case _:
-            points = 0
-            description = "Бизнес работает от 12 до 24 месяцев"
-    
+    if age > 24:
+        points = 10
+        description = "Бизнес работает более 24 месяцев"
+    elif age < 12:
+        points = -15
+        description = "Бизнес работает менее 12 месяцев"
+    else:
+        points = 0
+        description = "Бизнес работает от 12 до 24 месяцев"
+
     return ProcessedValue(
         points=points,
         factor=Factor(
@@ -149,25 +141,22 @@ def process_age(age: int) -> ProcessedValue:
             label=LabelType.AGE,
             value=f"{age} мес.",
             points=points,
-            description=description
-        )
+            description=description,
+        ),
     )
 
 
 def process_bki_score(bki_score: int) -> ProcessedValue:
-    match bki_score:
-        case bki_score if bki_score > 700:
-            points = 15
-            description = "Высокий кредитный рейтинг"
-        
-        case bki_score if bki_score < 500:
-            points = -20
-            description = "Низкий кредитный рейтинг"
-        
-        case _:
-            points = 0
-            description = "Средний кредитный рейтинг"
-    
+    if bki_score > 700:
+        points = 15
+        description = "Высокий кредитный рейтинг"
+    elif bki_score < 500:
+        points = -20
+        description = "Низкий кредитный рейтинг"
+    else:
+        points = 0
+        description = "Средний кредитный рейтинг"
+
     return ProcessedValue(
         points=points,
         factor=Factor(
@@ -175,21 +164,19 @@ def process_bki_score(bki_score: int) -> ProcessedValue:
             label=LabelType.BKI,
             value=str(bki_score),
             points=points,
-            description=description
-        )
+            description=description,
+        ),
     )
 
 
 def process_overdue_count(overdue_count: int) -> ProcessedValue:
-    match overdue_count:
-        case overdue_count if overdue_count > 0:
-            points = -30
-            description = f"Найдено просрочек: {overdue_count}"
-        
-        case _:
-            points = 0
-            description = "Просрочек не найдено"
-    
+    if overdue_count > 0:
+        points = -30
+        description = f"Найдено просрочек: {overdue_count}"
+    else:
+        points = 0
+        description = "Просрочек не найдено"
+
     return ProcessedValue(
         points=points,
         factor=Factor(
@@ -197,25 +184,22 @@ def process_overdue_count(overdue_count: int) -> ProcessedValue:
             label=LabelType.OVERDUE,
             value=str(overdue_count),
             points=points,
-            description=description
-        )
+            description=description,
+        ),
     )
 
 
-def process_dti(dti: float) -> ProcessedValue:    
-    match dti:
-        case dti if dti < 30:
-            points = 15
-            description = "Низкая долговая нагрузка"
-        
-        case dti if dti > 50:
-            points = -25
-            description = "Высокая долговая нагрузка"
-        
-        case _:
-            points = 0
-            description = "Умеренная долговая нагрузка"
-    
+def process_dti(dti: float) -> ProcessedValue:
+    if dti < 30:
+        points = 15
+        description = "Низкая долговая нагрузка"
+    elif dti > 50:
+        points = -25
+        description = "Высокая долговая нагрузка"
+    else:
+        points = 0
+        description = "Умеренная долговая нагрузка"
+
     return ProcessedValue(
         points=points,
         factor=Factor(
@@ -223,8 +207,8 @@ def process_dti(dti: float) -> ProcessedValue:
             label=LabelType.DTI,
             value=f"{dti:.1f}%",
             points=points,
-            description=description
-        )
+            description=description,
+        ),
     )
 
 
@@ -232,11 +216,10 @@ def process_ai_result(ai_result: AICheckResult) -> ProcessedValue:
     if ai_result.is_valid:
         points = 10
         description = "Цель кредита соответствует ОКВЭД"
-
     else:
         points = -20
         description = "Цель кредита не соответствует ОКВЭД"
-    
+
     return ProcessedValue(
         points=points,
         factor=Factor(
@@ -244,6 +227,6 @@ def process_ai_result(ai_result: AICheckResult) -> ProcessedValue:
             label=LabelType.AI,
             value=ai_result.comment,
             points=points,
-            description=description
-        )
+            description=description,
+        ),
     )
