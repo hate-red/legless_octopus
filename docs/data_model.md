@@ -1,7 +1,7 @@
 # Модель данных
 
 СУБД: **PostgreSQL 15**. ORM: SQLAlchemy 2.0 (async, `asyncpg`).  
-Миграции: `backend/alembic/versions/0001_initial.py`, `backend/alembic/versions/0002_product_categories.py`, `backend/alembic/versions/0003_company_forms_outcomes.py`, `backend/alembic/versions/0004_okved_reference.py`.
+Миграции: Alembic
 
 ## ER-диаграмма
 
@@ -160,19 +160,6 @@ erDiagram
 | `SECURED` | С залогом | 300 тыс. — 10 млн ₽ | 12–60 мес. | 17.5% | залог | аннуитетный | нет |
 | `CREDIT_LINE` | Кредитная линия | 300 тыс. — 5 млн ₽ | 12–36 мес. | 18.9% | нет | дифференцированный | да |
 
-- `products.repayment_type` принимает значения `annuity` или `differentiated`.
-- `products.collateral_required` показывает, требуется ли обеспечение.
-- `products.is_revolving` отличает возобновляемую кредитную линию от срочного кредита.
-- Миграция `0002_product_categories` переименовывает существующие продукты на месте (`WORKING_CAPITAL → UNSECURED`, `EQUIPMENT → SECURED`, `EXPRESS → CREDIT_LINE`), сохраняя `product_id` у заявок.
-
-## Справочник ОКВЭД
-
-- `okveds.code` — уникальный код вида деятельности, `okveds.name` — его название.
-- `llc_companies.okved_id` и `individual_entrepreneurs.okved_id` — обязательные ссылки на справочник с `ON DELETE RESTRICT`.
-- Один код может использоваться многими компаниями; у компании ровно один вид деятельности.
-- В справочнике шесть кодов: `62.01`, `47.11`, `46.90`, `43.21`, `49.41`, `71.11`.
-- API отдаёт справочник вложенным объектом `okved: { id, code, name }` в составе `CompanyOut`.
-
 ## Роли
 
 | `users.role` | Возможности |
@@ -251,8 +238,6 @@ erDiagram
   }
 ]
 ```
-
-`factor` — машиночитаемый код: `base`, `revenue`, `profit`, `age`, `bki`, `overdue`, `dti`, `ai`, `cap`.
 
 ### `financial_verifications.flags`
 
