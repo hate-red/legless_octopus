@@ -12,11 +12,14 @@
 
 ## 2. Локальный ИИ
 
-### llama.cpp
+### Llama.cpp
 
-- Библиотека: `llama-cpp-python` версии 0.3.36
-- Лицензия: MIT license
-- Репозиторий: https://github.com/ggml-org/llama.cpp
+- Библиотека: `llama-cpp-python`
+- Использование: Подключение локальной LLM к проекту
+
+## Gemma4
+
+- Локальная модель gemma4-e4b c квантизацией q4_0-it
 - Использование: Анализ цели финансирования на совпадение ОКВЭДу компании
 
 ## 3. Backend
@@ -29,7 +32,8 @@
 - Pydantic
 - Jose
 - Bcrypt
-- Llama.cpp  
+- Llama.cpp
+- Huggingface
 
 ## 4. База данных
 
