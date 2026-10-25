@@ -31,8 +31,10 @@ from app.services.okveds import get_or_create_okved
 from app.services.scoring.scoring import calculate_score
 from app.services.state_machine import transition
 
+
 logger = logging.getLogger(__name__)
 
+llm_checker = LLMPuproseChecker()
 
 def _diff_pct(value: float, reference: float) -> float:
     if reference == 0:
@@ -189,7 +191,6 @@ async def run_orchestrator(
         comment="Проверка цели кредита локальной семантической моделью.",
     )
 
-    llm_checker = LLMPuproseChecker()
     ai_result = await llm_checker.check_purpose(
         purpose=application.purpose,
         okved=company.okved.name,
