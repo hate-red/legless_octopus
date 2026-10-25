@@ -343,6 +343,17 @@ async def sign_contract(
         ),
         actor_role="client",
     )
+
+    bki_result = application.bki_check
+    if bki_result is not None:
+        bki_result.active_loans += 1
+        # amount / months + amount * r
+        bki_result.monthly_payments += (
+            application.amount / application.term_months + 
+            application.amount * (application.product.base_rate / 1200)
+        )
+        application.bki_check = bki_result
+
     await db.commit()
     loaded = await reload_application(db, application.id)
     assert loaded is not None
